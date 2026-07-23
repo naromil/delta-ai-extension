@@ -1,6 +1,5 @@
 /* ---- CSS Custom Properties (matches base.css dark theme) ---- */
 
-#delta-ctxMenu,
 #delta-popup,
 #delta-expandPrompt {
   --delta-bg: #20212a;
@@ -20,50 +19,6 @@
   --delta-radius-md: 12px;
   --delta-shadow-2: 0 6px 22px rgba(0, 0, 0, 0.22);
   --delta-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-/* ---- Context Menu ---- */
-
-#delta-ctxMenu {
-  position: fixed;
-  z-index: 2147483647;
-  background: var(--delta-surface-2);
-  border: 1px solid var(--delta-border-strong);
-  border-radius: var(--delta-radius-sm);
-  box-shadow: var(--delta-shadow-2);
-  padding: 4px 0;
-  font-size: 13px;
-  font-family: var(--delta-font);
-  min-width: 140px;
-  color: var(--delta-text-2);
-}
-
-#delta-ctxMenu .delta-item {
-  padding: 6px 14px;
-  cursor: pointer;
-  color: var(--delta-text-2);
-  user-select: none;
-}
-
-#delta-ctxMenu .delta-item:hover {
-  background: var(--delta-surface-3);
-  color: var(--delta-text-1);
-}
-
-#delta-ctxMenu .delta-item.delta-disabled {
-  color: var(--delta-text-3);
-  cursor: default;
-}
-
-#delta-ctxMenu .delta-item.delta-disabled:hover {
-  background: transparent;
-  color: var(--delta-text-3);
-}
-
-#delta-ctxMenu .delta-sep {
-  height: 1px;
-  background: var(--delta-border-strong);
-  margin: 4px 0;
 }
 
 /* ---- Inline Popup ---- */

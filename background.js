@@ -1,7 +1,7 @@
 /* background.js — module script (manifest "type": "module")
- * Message handler: receives expand requests from the content script,
- * builds LLM messages using shared prompts, calls the configured
- * provider, and streams chunks back to the content script tab.
+ * Registers native context menu items "Expand" and "Expand on…".
+ * Routes menu clicks to the content script which handles all UI.
+ * Accepts expandRequest from content script and streams LLM chunks back.
  */
 
 import { callProviderStream } from './src/background/provider.js';
@@ -11,7 +11,7 @@ import { getSystemPrompt } from './src/shared/prompts.js';
 
 const activeStreams = new Map();
 
-function abortActiveStream(requestId) {
+function abortStream(requestId) {
   const ac = activeStreams.get(requestId);
   if (ac) {
     ac.abort();
@@ -19,17 +19,12 @@ function abortActiveStream(requestId) {
   }
 }
 
-async function handleExpand(message, sender) {
-  const { selection, context, prompt, requestId, role } = message;
-  const tabId = sender.tab?.id;
-  if (!tabId) return;
-
-  // Abort any previous stream with the same requestId
-  abortActiveStream(requestId);
+async function streamExpand(tabId, frameId, requestId, selection, context, prompt) {
+  abortStream(requestId);
 
   const config = await loadConfig();
   const messages = [
-    { role: 'system', content: getSystemPrompt(role) },
+    { role: 'system', content: getSystemPrompt('lookup') },
     ...buildExpandMessages({ answer: context, selection, prompt })
   ];
 
@@ -47,9 +42,8 @@ async function handleExpand(message, sender) {
           requestId,
           text: fullResponse,
           done: false
-        });
+        }, { frameId });
       } catch {
-        // Tab may have closed
         break;
       }
     }
@@ -61,29 +55,79 @@ async function handleExpand(message, sender) {
           requestId,
           text: fullResponse,
           done: true
-        });
-      } catch { /* ignore */ }
+        }, { frameId });
+      } catch { /* tab gone */ }
     }
   } catch (err) {
-    const errorMsg = err?.message || 'An unknown error occurred';
     try {
       await browser.tabs.sendMessage(tabId, {
         type: 'expandChunk',
         requestId,
-        text: errorMsg,
-        error: errorMsg,
+        error: err?.message || 'Unknown error',
         done: true
-      });
-    } catch { /* ignore */ }
+      }, { frameId });
+    } catch { /* tab gone */ }
   } finally {
     activeStreams.delete(requestId);
   }
 }
 
+/* ---- Register native context menu items (every startup, not just onInstalled) ---- */
+
+function registerContextMenus() {
+  browser.contextMenus.removeAll().then(() => {
+    browser.contextMenus.create({
+      id: 'delta-expand',
+      title: 'Expand',
+      contexts: ['selection']
+    });
+    browser.contextMenus.create({
+      id: 'delta-expand-prompted',
+      title: 'Expand on\u2026',
+      contexts: ['selection']
+    });
+  });
+}
+
+registerContextMenus();
+
+let reqCtr = 0;
+function genRequestId() {
+  return 'rx_' + Date.now() + '_' + (reqCtr++);
+}
+
+browser.contextMenus.onClicked.addListener((info, tab) => {
+  const tabId = tab.id;
+  const frameId = typeof info.frameId === 'number' ? info.frameId : 0;
+  const requestId = genRequestId();
+
+  if (info.menuItemId === 'delta-expand') {
+    browser.tabs.sendMessage(tabId, {
+      type: 'expandFromMenu',
+      requestId
+    }, { frameId });
+  } else if (info.menuItemId === 'delta-expand-prompted') {
+    browser.tabs.sendMessage(tabId, {
+      type: 'expandPromptedFromMenu',
+      requestId
+    }, { frameId });
+  }
+});
+
+/* ---- Message handler ---- */
+
 browser.runtime.onMessage.addListener((message, sender) => {
-  if (message.type === 'expand') {
-    handleExpand(message, sender);
-    // We don't return true — streaming sends async messages back
+  if (message.type === 'expandRequest') {
+    const tabId = sender.tab?.id;
+    if (!tabId) return false;
+    streamExpand(
+      tabId,
+      typeof sender.frameId === 'number' ? sender.frameId : 0,
+      message.requestId,
+      message.selection,
+      message.context,
+      message.prompt
+    );
     return false;
   }
 
@@ -96,7 +140,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
   }
 
   if (message.type === 'abort') {
-    abortActiveStream(message.requestId);
+    abortStream(message.requestId);
     return false;
   }
 });
