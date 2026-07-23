@@ -1,6 +1,6 @@
 /* ---- CSS Custom Properties (matches base.css dark theme) ---- */
 
-#delta-popup,
+.delta-popup,
 #delta-expandPrompt {
   --delta-bg: #20212a;
   --delta-surface-1: #25262e;
@@ -23,8 +23,8 @@
 
 /* ---- Inline Popup ---- */
 
-#delta-popup {
-  position: absolute;
+.delta-popup {
+  position: fixed;
   z-index: 2147483646;
   background: var(--delta-surface-2);
   border: 1px solid var(--delta-accent);
@@ -37,6 +37,7 @@
   max-width: 420px;
   min-width: 200px;
   animation: delta-fade-in 0.15s ease;
+  user-select: text;
 }
 
 @keyframes delta-fade-in {

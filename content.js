@@ -3,6 +3,8 @@
  * (no preventDefault — native menu still appears).
  * Handles messages from background: expandFromMenu, expandPromptedFromMenu,
  * and expandChunk.
+ * Supports multiple coexisting popups (infinitely recursive expand).
+ * Popups close only via Esc key or close button (no blur dismissal).
  */
 
 (function () {
@@ -11,13 +13,12 @@
 
   /* ---- State ---- */
 
-  let popupEl = null;
-  let promptInputEl = null;
-  let activeRequestId = null;
-  let lastClickX = 0;
-  let lastClickY = 0;
-  let lastExpandData = null;
-  // lastExpandData: { selection, context, rect: { left, top, bottom, width, height } } | null
+  var popups = new Map(); // requestId -> { el: HTMLElement }
+  var promptInputEl = null;
+  var lastClickX = 0;
+  var lastClickY = 0;
+  var lastExpandData = null;
+  var popupCounter = 0;
 
   /* ---- DOM Helpers ---- */
 
@@ -28,8 +29,8 @@
   /** Walk up from node to nearest block-level ancestor and extract its text. */
   function getSurroundingText(node, maxLen) {
     maxLen = maxLen || 2000;
-    let el = node;
-    const blockTags = new Set([
+    var el = node;
+    var blockTags = new Set([
       'P', 'DIV', 'SECTION', 'ARTICLE', 'MAIN', 'LI', 'TD', 'TH',
       'BLOCKQUOTE', 'PRE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BODY'
     ]);
@@ -38,17 +39,17 @@
       el = el.parentElement;
     }
     if (!el) el = document.body;
-    const text = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    var text = (el.textContent || '').replace(/\s+/g, ' ').trim();
     if (text.length <= maxLen) return text;
 
-    const sel = window.getSelection();
-    const selText = sel ? sel.toString().trim() : '';
-    const idx = text.indexOf(selText);
+    var sel = window.getSelection();
+    var selText = sel ? sel.toString().trim() : '';
+    var idx = text.indexOf(selText);
     if (idx >= 0) {
-      const half = Math.floor(maxLen / 2);
-      const start = Math.max(0, idx - half);
-      const end = Math.min(text.length, idx + selText.length + half);
-      let slice = text.slice(start, end);
+      var half = Math.floor(maxLen / 2);
+      var start = Math.max(0, idx - half);
+      var end = Math.min(text.length, idx + selText.length + half);
+      var slice = text.slice(start, end);
       if (start > 0) slice = '\u2026' + slice;
       if (end < text.length) slice = slice + '\u2026';
       return slice;
@@ -58,19 +59,19 @@
 
   /** Capture current selection text, surrounding context, and bounding rect. */
   function captureExpandData() {
-    const sel = window.getSelection();
-    const text = sel ? sel.toString().trim() : '';
+    var sel = window.getSelection();
+    var text = sel ? sel.toString().trim() : '';
     if (!text || !sel || sel.rangeCount === 0) return null;
 
-    const range = sel.getRangeAt(0).cloneRange();
-    const rect = range.getBoundingClientRect();
-    const anchor = range.startContainer;
-    const context = getSurroundingText(anchor || document.body, 2000);
+    var range = sel.getRangeAt(0).cloneRange();
+    var rect = range.getBoundingClientRect();
+    var anchor = range.startContainer;
+    var context = getSurroundingText(anchor || document.body, 2000);
     if (!context) return null;
 
     return {
       selection: text,
-      context,
+      context: context,
       rect: {
         left: rect.left,
         top: rect.top,
@@ -95,60 +96,73 @@
     }, 0);
   }, true);
 
-  /* ---- Popup ---- */
+  /* ---- Multiple Popups ---- */
 
   function createPopup(rect, requestId) {
-    dismissPopup();
+    popupCounter++;
 
-    const el = document.createElement('div');
-    el.id = 'delta-popup';
+    var el = document.createElement('div');
+    el.className = 'delta-popup';
+    el.id = 'delta-popup-' + requestId;
     el.setAttribute('data-request-id', requestId);
-    el.innerHTML =
-      '<div class="delta-popup-header"><span class="delta-popup-title">Expand</span><span class="delta-popup-close">&times;</span></div>' +
-      '<div class="delta-popup-body">Thinking\u2026</div>';
 
-    function positionPopup() {
-      var pad = 8;
-      var left = rect.left + window.scrollX;
-      var top = rect.bottom + window.scrollY + pad;
-      var maxW = Math.min(420, window.innerWidth - 16);
-
-      if (left + maxW > window.scrollX + window.innerWidth - pad) {
-        left = Math.max(pad, window.scrollX + window.innerWidth - maxW - pad);
-      }
-      if (left < window.scrollX + pad) left = window.scrollX + pad;
-
-      if (top + el.offsetHeight > window.scrollY + window.innerHeight - pad) {
-        top = rect.top + window.scrollY - el.offsetHeight - pad;
-      }
-      if (top < window.scrollY + pad) top = window.scrollY + pad;
-
-      el.style.left = left + 'px';
-      el.style.top = top + 'px';
-    }
-
-    document.body.appendChild(el);
-    positionPopup();
-    popupEl = el;
-
-    el.querySelector('.delta-popup-close').addEventListener('click', function () {
-      dismissPopup();
+    var header = document.createElement('div');
+    header.className = 'delta-popup-header';
+    var title = document.createElement('span');
+    title.className = 'delta-popup-title';
+    title.textContent = 'Expand';
+    var close = document.createElement('span');
+    close.className = 'delta-popup-close';
+    close.textContent = '\u00d7';
+    close.addEventListener('click', function () {
+      dismissPopup(requestId);
     });
+    header.appendChild(title);
+    header.appendChild(close);
+    el.appendChild(header);
 
-    var onDown = function (e) {
-      if (!el.contains(e.target)) {
-        dismissPopup();
-        document.removeEventListener('mousedown', onDown, true);
-      }
-    };
-    document.addEventListener('mousedown', onDown, true);
+    var body = document.createElement('div');
+    body.className = 'delta-popup-body';
+    body.textContent = 'Thinking\u2026';
+    el.appendChild(body);
+
+    /* Position with stacking offset */
+    var offset = (popupCounter - 1) * 20;
+    var pad = 8;
+    var left = rect.left + offset;
+    var top = rect.bottom + offset + pad;
+    var maxW = Math.min(420, window.innerWidth - 16);
+
+    if (left + maxW > window.innerWidth - pad) {
+      left = Math.max(pad, window.innerWidth - maxW - pad);
+    }
+    if (left < pad) left = pad;
+
+    /* Append off-screen, measure height, then finalize position */
+    el.style.position = 'fixed';
+    el.style.left = '-9999px';
+    el.style.top = '-9999px';
+    el.style.maxWidth = maxW + 'px';
+    document.body.appendChild(el);
+
+    var popupH = el.offsetHeight;
+    if (top + popupH > window.innerHeight - pad) {
+      top = Math.max(pad, rect.top - popupH - pad);
+    }
+    if (top < pad) top = pad;
+    el.style.left = left + 'px';
+    el.style.top = top + 'px';
+    el.style.zIndex = 2147483646 + popupCounter;
+
+    popups.set(requestId, { el: el });
 
     return el;
   }
 
-  function updatePopup(text, done, error) {
-    if (!popupEl) return;
-    var body = popupEl.querySelector('.delta-popup-body');
+  function updatePopup(requestId, text, done, error) {
+    var entry = popups.get(requestId);
+    if (!entry) return;
+    var body = entry.el.querySelector('.delta-popup-body');
     if (!body) return;
     if (error) {
       body.className = 'delta-popup-body delta-error';
@@ -159,19 +173,43 @@
     }
   }
 
-  function dismissPopup() {
-    if (activeRequestId) {
-      browser.runtime.sendMessage({ type: 'abort', requestId: activeRequestId });
-      activeRequestId = null;
-    }
-    removeEl(popupEl);
-    popupEl = null;
+  function dismissPopup(requestId) {
+    var entry = popups.get(requestId);
+    if (!entry) return;
+    browser.runtime.sendMessage({ type: 'abort', requestId: requestId });
+    removeEl(entry.el);
+    popups.delete(requestId);
   }
+
+  function dismissTopPopup() {
+    if (popups.size === 0) return;
+    var topId = null;
+    var topZ = -1;
+    popups.forEach(function (entry, id) {
+      var z = parseInt(entry.el.style.zIndex) || 0;
+      if (z > topZ) {
+        topZ = z;
+        topId = id;
+      }
+    });
+    if (topId) dismissPopup(topId);
+  }
+
+  /* ---- Esc key handler ---- */
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (promptInputEl) {
+      removeEl(promptInputEl);
+      promptInputEl = null;
+      return;
+    }
+    dismissTopPopup();
+  });
 
   /* ---- Prompt Input ---- */
 
   function showPromptInput(requestId, data) {
-    dismissPopup();
     removeEl(promptInputEl);
 
     var el = document.createElement('div');
@@ -190,8 +228,8 @@
       removeEl(el);
       promptInputEl = null;
 
+      requestId = crypto.randomUUID();
       createPopup(data.rect, requestId);
-      activeRequestId = requestId;
       browser.runtime.sendMessage({
         type: 'expandRequest',
         requestId: requestId,
@@ -199,7 +237,7 @@
         context: data.context,
         prompt: val || undefined
       }).catch(function (err) {
-        updatePopup('Failed to send expand request: ' + (err && err.message ? err.message : err), true, true);
+        updatePopup(requestId, 'Failed to send expand request: ' + (err && err.message ? err.message : err), true, true);
       });
     }
 
@@ -234,14 +272,13 @@
       var data = lastExpandData;
       if (!data) return;
       createPopup(data.rect, msg.requestId);
-      activeRequestId = msg.requestId;
       browser.runtime.sendMessage({
         type: 'expandRequest',
         requestId: msg.requestId,
         selection: data.selection,
         context: data.context
       }).catch(function (err) {
-        updatePopup('Failed to send expand request: ' + (err && err.message ? err.message : err), true, true);
+        updatePopup(msg.requestId, 'Failed to send expand request: ' + (err && err.message ? err.message : err), true, true);
       });
       return;
     }
@@ -254,9 +291,26 @@
     }
 
     if (msg.type === 'expandChunk') {
-      if (msg.requestId !== activeRequestId) return;
-      updatePopup(msg.text, msg.done, msg.error);
+      var entry = popups.get(msg.requestId);
+      if (!entry) return;
+      var body = entry.el.querySelector('.delta-popup-body');
+      if (!body) return;
+      if (msg.error) {
+        body.className = 'delta-popup-body delta-error';
+        body.textContent = msg.error;
+        return;
+      }
+      body.className = 'delta-popup-body';
+      body.textContent = msg.text || '\u200b';
       return;
     }
+  });
+
+  /* ---- Cleanup on page unload ---- */
+  window.addEventListener('unload', function () {
+    popups.forEach(function (entry, id) {
+      browser.runtime.sendMessage({ type: 'abort', requestId: id });
+    });
+    popups.clear();
   });
 })();
