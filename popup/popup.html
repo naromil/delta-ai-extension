@@ -6,10 +6,52 @@
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
-  <div id="app">
-    <h1>Delta AI</h1>
-    <p>Extension loaded</p>
+  <div class="container">
+    <header>
+      <h1>Delta AI Expand</h1>
+      <p class="subtitle">Configure your LLM provider for text expansions.</p>
+    </header>
+
+    <form id="settings-form">
+      <label for="providerType">Provider</label>
+      <select id="providerType" name="providerType">
+        <option value="openai-compatible">OpenAI Compatible</option>
+        <option value="openai">OpenAI</option>
+        <option value="google-ai-studio">Google AI Studio</option>
+        <option value="openrouter">OpenRouter</option>
+        <option value="ollama">Ollama</option>
+      </select>
+
+      <div id="field-apiKey">
+        <label for="apiKey">API Key</label>
+        <input type="password" id="apiKey" name="apiKey" placeholder="sk-..." autocomplete="off" />
+      </div>
+
+      <div id="field-baseUrl">
+        <label for="baseUrl">Base URL</label>
+        <input type="text" id="baseUrl" name="baseUrl" placeholder="https://api.openai.com/v1" />
+      </div>
+
+      <div id="field-host">
+        <label for="host">Host</label>
+        <input type="text" id="host" name="host" placeholder="http://localhost:11434" />
+      </div>
+
+      <label for="model">Model</label>
+      <input type="text" id="model" name="model" placeholder="gpt-4o-mini" list="model-suggestions" />
+      <datalist id="model-suggestions"></datalist>
+
+      <label class="checkbox-label">
+        <input type="checkbox" id="webSearchEnabled" name="webSearchEnabled" />
+        Enable web search
+      </label>
+
+      <button type="submit" id="save-btn">Save</button>
+    </form>
+
+    <div id="status"></div>
   </div>
+
   <script type="module" src="popup.js"></script>
 </body>
 </html>
