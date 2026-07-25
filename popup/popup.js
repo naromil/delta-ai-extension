@@ -54,4 +54,18 @@ function setMissing(elId, missing) {
 
   shortcutEl.textContent = shortcut || '(not set)';
   setMissing(shortcutEl, !shortcut);
+
+  try {
+    const { unfed } = await browser.runtime.sendMessage({ type: 'kbGetStatus' });
+    const kbEl = document.getElementById('kb-label');
+    if (unfed > 0) {
+      kbEl.textContent = `${unfed} pending`;
+    } else {
+      const { prompt } = await browser.runtime.sendMessage({ type: 'kbLoadData' });
+      kbEl.textContent = prompt ? 'Active' : '(not set)';
+      setMissing(kbEl, !prompt);
+    }
+  } catch {
+    document.getElementById('kb-label').textContent = '—';
+  }
 })();

@@ -40,6 +40,8 @@ export const providerRegistry = {
   }
 };
 
+export const MAX_KEYWORDS_PER_CATEGORY = 20;
+
 export function createDefaultConfig() {
   return {
     providerType: 'openai-compatible',
@@ -49,5 +51,13 @@ export function createDefaultConfig() {
     model: '',
     webSearchEnabled: false,
     contextChars: 1500
+  };
+}
+
+export function createDefaultKbConfig() {
+  return {
+    prompt: '',
+    keywords: [],
+    kbModel: ''
   };
 }

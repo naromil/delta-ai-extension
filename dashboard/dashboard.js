@@ -181,3 +181,184 @@ async function initShortcutConfig() {
 
 initProviderConfig();
 initShortcutConfig();
+initKnowledgeBase();
+
+/* ---- Knowledge Base ---- */
+
+function showKbStatus(msg, error) {
+  const el = document.getElementById('kb-result');
+  el.textContent = msg;
+  el.className = error ? 'error' : 'ok';
+}
+
+async function refreshKbUI() {
+  const statusText = document.getElementById('kb-status-text');
+  const analyzeBtn = document.getElementById('kb-analyze-btn');
+  const reanalyzeBtn = document.getElementById('kb-reanalyze-btn');
+  const promptText = document.getElementById('kb-prompt-text');
+  const keywordsGrid = document.getElementById('kb-keywords');
+
+  try {
+    const [status, kbData] = await Promise.all([
+      browser.runtime.sendMessage({ type: 'kbGetStatus' }),
+      browser.runtime.sendMessage({ type: 'kbLoadData' })
+    ]);
+
+    const unfed = status.unfed;
+    const total = status.total;
+
+    if (total === 0) {
+      statusText.textContent = 'No expansion history yet.';
+    } else if (unfed > 0) {
+      statusText.textContent = `${unfed} / ${total} expansion(s) ready for analysis`;
+    } else {
+      statusText.textContent = `${total} expansion(s) analyzed`;
+    }
+
+    analyzeBtn.disabled = unfed === 0;
+    reanalyzeBtn.disabled = total === 0;
+
+    promptText.value = kbData.prompt || '';
+
+    const keywords = kbData.keywords || [];
+    renderKeywords(keywords, keywordsGrid);
+  } catch (err) {
+    statusText.textContent = 'Error loading KB data.';
+    console.error('KB refresh error:', err);
+  }
+}
+
+function renderKeywords(keywords, container) {
+  container.innerHTML = '';
+
+  if (keywords.length === 0) {
+    container.innerHTML = '<span style="color: rgba(228,230,240,0.35); font-size: 12px;">No keywords yet. Run analysis to extract them.</span>';
+    return;
+  }
+
+  const categories = [
+    { key: 'topic', label: 'Topics', cssClass: 'blue' },
+    { key: 'knowledge_area', label: 'Knowledge', cssClass: 'green' },
+    { key: 'learning_preference', label: 'Preferences', cssClass: 'purple' }
+  ];
+
+  for (const cat of categories) {
+    const group = keywords.filter(kw => kw.category === cat.key).sort((a, b) => b.count - a.count);
+    if (group.length === 0) continue;
+
+    const catDiv = document.createElement('div');
+    const label = document.createElement('div');
+    label.className = 'kb-cat-label';
+    label.textContent = cat.label;
+    catDiv.appendChild(label);
+
+    const tagsDiv = document.createElement('div');
+    tagsDiv.className = 'kb-tags';
+
+    for (const kw of group) {
+      const tag = document.createElement('span');
+      tag.className = `kb-tag ${cat.cssClass}`;
+      tag.title = `${kw.keyword} (${kw.count}×)`;
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'kb-tag-keyword';
+      nameSpan.textContent = kw.keyword;
+      tag.appendChild(nameSpan);
+
+      if (kw.count > 1) {
+        const countSpan = document.createElement('span');
+        countSpan.className = 'kb-tag-count';
+        countSpan.textContent = `×${kw.count}`;
+        tag.appendChild(countSpan);
+      }
+
+      tagsDiv.appendChild(tag);
+    }
+
+    catDiv.appendChild(tagsDiv);
+    container.appendChild(catDiv);
+  }
+}
+
+async function initKnowledgeBase() {
+  await refreshKbUI();
+
+  const analyzeBtn = document.getElementById('kb-analyze-btn');
+  const reanalyzeBtn = document.getElementById('kb-reanalyze-btn');
+  const reanalyzeRow = document.getElementById('kb-reanalyze-row');
+  const reanalyzeCount = document.getElementById('kb-reanalyze-count');
+  const reanalyzeGo = document.getElementById('kb-reanalyze-go');
+  const reanalyzeCancel = document.getElementById('kb-reanalyze-cancel');
+  const clearBtn = document.getElementById('kb-clear-btn');
+
+  analyzeBtn.addEventListener('click', async () => {
+    analyzeBtn.disabled = true;
+    analyzeBtn.textContent = 'Analyzing…';
+    showKbStatus('', false);
+
+    try {
+      const result = await browser.runtime.sendMessage({ type: 'kbAnalyze' });
+      if (result.conversationsAnalyzed === 0) {
+        showKbStatus('No unfed expansions to analyze.', false);
+      } else {
+        showKbStatus(`Analyzed ${result.conversationsAnalyzed} expansion(s).`, false);
+      }
+      await refreshKbUI();
+    } catch (err) {
+      showKbStatus(err?.message || 'Analysis failed.', true);
+    } finally {
+      analyzeBtn.textContent = 'Analyze';
+      analyzeBtn.disabled = false;
+    }
+  });
+
+  reanalyzeBtn.addEventListener('click', () => {
+    reanalyzeRow.style.display = 'flex';
+    setTimeout(() => reanalyzeCount.focus(), 0);
+  });
+
+  reanalyzeGo.addEventListener('click', async () => {
+    const n = parseInt(reanalyzeCount.value, 10);
+    if (isNaN(n) || n < 1) return;
+
+    reanalyzeRow.style.display = 'none';
+    reanalyzeBtn.disabled = true;
+    reanalyzeBtn.textContent = 'Re-analyzing…';
+    showKbStatus('', false);
+
+    try {
+      const result = await browser.runtime.sendMessage({ type: 'kbReanalyze', count: n });
+      if (result.conversationsAnalyzed === 0) {
+        showKbStatus('No expansions found.', false);
+      } else {
+        showKbStatus(`Re-analyzed ${result.conversationsAnalyzed} expansion(s).`, false);
+      }
+      await refreshKbUI();
+    } catch (err) {
+      showKbStatus(err?.message || 'Re-analysis failed.', true);
+    } finally {
+      reanalyzeBtn.textContent = 'Re-Analyze';
+      reanalyzeBtn.disabled = false;
+    }
+  });
+
+  reanalyzeCancel.addEventListener('click', () => {
+    reanalyzeRow.style.display = 'none';
+  });
+
+  reanalyzeCount.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') reanalyzeGo.click();
+    if (e.key === 'Escape') reanalyzeCancel.click();
+  });
+
+  clearBtn.addEventListener('click', async () => {
+    if (!confirm('Delete all expansion history and Knowledge Base data? This cannot be undone.')) return;
+    try {
+      await browser.runtime.sendMessage({ type: 'kbClear' });
+      showKbStatus('All KB data cleared.', false);
+      await refreshKbUI();
+    } catch (err) {
+      showKbStatus(err?.message || 'Clear failed.', true);
+    }
+  });
+}

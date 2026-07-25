@@ -8,6 +8,8 @@ import { callProviderStream } from './src/background/provider.js';
 import { loadConfig, saveConfig } from './src/background/config.js';
 import { buildExpandMessages } from './src/shared/expand-prompt.js';
 import { getSystemPrompt } from './src/shared/prompts.js';
+import { loadKbPrompt, loadKbData, saveKbPrompt, saveKbKeywords, analyzeExpansions } from './src/background/kb.js';
+import { saveExpansionRecord, loadExpansionRecords, listUnfedExpansions, markExpansionKbFed, clearExpansionRecords } from './src/background/expansion-records.js';
 
 const activeStreams = new Map();
 
@@ -23,8 +25,14 @@ async function streamExpand(tabId, frameId, requestId, selection, context, promp
   abortStream(requestId);
 
   const config = await loadConfig();
+  const kbPrompt = await loadKbPrompt();
+  let systemContent = getSystemPrompt('lookup');
+  if (kbPrompt) {
+    systemContent = systemContent + '\n\n' + kbPrompt;
+  }
+
   const messages = [
-    { role: 'system', content: getSystemPrompt('lookup') },
+    { role: 'system', content: systemContent },
     ...buildExpandMessages({ answer: context, selection, prompt })
   ];
 
@@ -57,6 +65,17 @@ async function streamExpand(tabId, frameId, requestId, selection, context, promp
           done: true
         }, { frameId });
       } catch { /* tab gone */ }
+
+      if (fullResponse && !ac.signal.aborted) {
+        saveExpansionRecord({
+          id: requestId,
+          timestamp: Date.now(),
+          selection,
+          context,
+          prompt: prompt || '',
+          response: fullResponse
+        }).catch(() => {});
+      }
     }
   } catch (err) {
     try {
@@ -152,5 +171,42 @@ browser.runtime.onMessage.addListener((message, sender) => {
   if (message.type === 'openSettings') {
     browser.tabs.create({ url: 'dashboard/dashboard.html' });
     return false;
+  }
+
+  if (message.type === 'kbLoadData') {
+    return loadKbData();
+  }
+
+  if (message.type === 'kbGetStatus') {
+    return (async () => {
+      const records = await loadExpansionRecords();
+      const unfed = records.filter(r => !r.kbFed);
+      return { total: records.length, unfed: unfed.length };
+    })();
+  }
+
+  if (message.type === 'kbAnalyze') {
+    return (async () => {
+      const unfed = await listUnfedExpansions();
+      return analyzeExpansions(unfed, markExpansionKbFed);
+    })();
+  }
+
+  if (message.type === 'kbReanalyze') {
+    return (async () => {
+      const all = await loadExpansionRecords();
+      const n = message.count || all.length;
+      const subset = all.slice(-Math.min(n, all.length));
+      return analyzeExpansions(subset, null);
+    })();
+  }
+
+  if (message.type === 'kbClear') {
+    return (async () => {
+      await clearExpansionRecords();
+      await saveKbPrompt('');
+      await saveKbKeywords([]);
+      return { ok: true };
+    })();
   }
 });
