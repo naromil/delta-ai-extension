@@ -24,9 +24,20 @@
       "all_frames": true
     }
   ],
+  "commands": {
+    "expand": {
+      "suggested_key": {
+        "default": "Ctrl+E"
+      },
+      "description": "Expand the current selection"
+    }
+  },
   "action": {
-    "default_popup": "popup/popup.html",
     "default_title": "Delta AI Expand"
+  },
+  "options_ui": {
+    "page": "dashboard/dashboard.html",
+    "open_in_tab": true
   },
   "icons": {
     "48": "icons/icon.svg",

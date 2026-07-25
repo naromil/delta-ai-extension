@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="dashboard.css" />
+  <title>Delta AI Expand — Dashboard</title>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>Δ Delta AI Expand</h1>
+      <p class="subtitle">Configure your LLM provider and shortcut key.</p>
+    </header>
+
+    <section class="card">
+      <h2>Provider Settings</h2>
+      <form id="settings-form">
+        <div class="field">
+          <label for="providerType">Provider</label>
+          <select id="providerType" name="providerType">
+            <option value="openai-compatible">OpenAI Compatible</option>
+            <option value="openai">OpenAI</option>
+            <option value="google-ai-studio">Google AI Studio</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="ollama">Ollama</option>
+          </select>
+        </div>
+
+        <div class="field" id="field-apiKey">
+          <label for="apiKey">API Key</label>
+          <input type="password" id="apiKey" name="apiKey" placeholder="sk-..." autocomplete="off" />
+        </div>
+
+        <div class="field" id="field-baseUrl">
+          <label for="baseUrl">Base URL</label>
+          <input type="text" id="baseUrl" name="baseUrl" placeholder="https://api.openai.com/v1" />
+        </div>
+
+        <div class="field" id="field-host">
+          <label for="host">Host</label>
+          <input type="text" id="host" name="host" placeholder="http://localhost:11434" />
+        </div>
+
+        <div class="field">
+          <label for="model">Model</label>
+          <input type="text" id="model" name="model" placeholder="gpt-4o-mini" list="model-suggestions" />
+          <datalist id="model-suggestions"></datalist>
+        </div>
+
+        <label class="checkbox-label">
+          <input type="checkbox" id="webSearchEnabled" name="webSearchEnabled" />
+          Enable web search
+        </label>
+
+        <button type="submit" id="save-btn">Save</button>
+        <div id="status"></div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Shortcut Key</h2>
+      <p class="hint">Press a key combination to set the "Expand…" shortcut. At least one modifier (Ctrl, Alt, Shift) is required, except for function keys.</p>
+      <div class="shortcut-row">
+        <input type="text" id="shortcut" placeholder="Press a key combination…" readonly />
+        <button type="button" id="reset-shortcut">Reset to default</button>
+      </div>
+      <div id="shortcut-status"></div>
+    </section>
+  </div>
+
+  <script type="module" src="dashboard.js"></script>
+</body>
+</html>

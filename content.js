@@ -1,8 +1,7 @@
 /* content.js — runs in every page/frame (all_frames: true).
  * Passively tracks selection/click-coords on contextmenu/mouseup
  * (no preventDefault — native menu still appears).
- * Handles messages from background: expandFromMenu, expandPromptedFromMenu,
- * and expandChunk.
+ * Handles messages from background: expandPromptedFromMenu and expandChunk.
  * Supports multiple coexisting popups (infinitely recursive expand).
  * Popups close only via Esc key or close button (no blur dismissal).
  */
@@ -214,8 +213,8 @@
 
     var el = document.createElement('div');
     el.id = 'delta-expandPrompt';
-    el.style.left = lastClickX + 'px';
-    el.style.top = lastClickY + 'px';
+    el.style.left = (data.rect.left || lastClickX) + 'px';
+    el.style.top = (data.rect.bottom || lastClickY) + 'px';
 
     var input = document.createElement('input');
     input.type = 'text';
@@ -268,21 +267,6 @@
   /* ---- Message handler ---- */
 
   browser.runtime.onMessage.addListener(function (msg) {
-    if (msg.type === 'expandFromMenu') {
-      var data = lastExpandData;
-      if (!data) return;
-      createPopup(data.rect, msg.requestId);
-      browser.runtime.sendMessage({
-        type: 'expandRequest',
-        requestId: msg.requestId,
-        selection: data.selection,
-        context: data.context
-      }).catch(function (err) {
-        updatePopup(msg.requestId, 'Failed to send expand request: ' + (err && err.message ? err.message : err), true, true);
-      });
-      return;
-    }
-
     if (msg.type === 'expandPromptedFromMenu') {
       var data = lastExpandData;
       if (!data) return;

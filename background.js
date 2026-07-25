@@ -1,5 +1,5 @@
 /* background.js — module script (manifest "type": "module")
- * Registers native context menu items "Expand" and "Expand on…".
+ * Registers a native context menu item "Expand…".
  * Routes menu clicks to the content script which handles all UI.
  * Accepts expandRequest from content script and streams LLM chunks back.
  */
@@ -78,18 +78,19 @@ function registerContextMenus() {
   browser.contextMenus.removeAll().then(() => {
     browser.contextMenus.create({
       id: 'delta-expand',
-      title: 'Expand',
-      contexts: ['selection']
-    });
-    browser.contextMenus.create({
-      id: 'delta-expand-prompted',
-      title: 'Expand on\u2026',
+      title: 'Expand\u2026',
       contexts: ['selection']
     });
   });
 }
 
 registerContextMenus();
+
+/* ---- Open dashboard on toolbar button click ---- */
+
+browser.action.onClicked.addListener(() => {
+  browser.tabs.create({ url: 'dashboard/dashboard.html' });
+});
 
 let reqCtr = 0;
 function genRequestId() {
@@ -103,15 +104,25 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
 
   if (info.menuItemId === 'delta-expand') {
     browser.tabs.sendMessage(tabId, {
-      type: 'expandFromMenu',
-      requestId
-    }, { frameId });
-  } else if (info.menuItemId === 'delta-expand-prompted') {
-    browser.tabs.sendMessage(tabId, {
       type: 'expandPromptedFromMenu',
       requestId
     }, { frameId });
   }
+});
+
+/* ---- Keyboard shortcut (Ctrl+E) ---- */
+
+browser.commands.onCommand.addListener((command) => {
+  if (command !== 'expand') return;
+  browser.tabs.query({ active: true, currentWindow: true }).then((tabs) => {
+    const tab = tabs[0];
+    if (!tab) return;
+    const requestId = genRequestId();
+    browser.tabs.sendMessage(tab.id, {
+      type: 'expandPromptedFromMenu',
+      requestId
+    });
+  });
 });
 
 /* ---- Message handler ---- */
