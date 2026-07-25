@@ -4,103 +4,165 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="dashboard.css" />
-  <title>Delta AI Expand — Dashboard</title>
+  <title>Delta AI Expand</title>
 </head>
 <body>
-  <div class="page">
-    <header>
-      <h1>Δ Delta AI Expand</h1>
-      <p class="subtitle">Configure your LLM provider and shortcut key.</p>
-    </header>
-
-    <section class="card">
-      <h2>Provider Settings</h2>
-      <form id="settings-form">
-        <div class="field">
-          <label for="providerType">Provider</label>
-          <select id="providerType" name="providerType">
-            <option value="openai-compatible">OpenAI Compatible</option>
-            <option value="openai">OpenAI</option>
-            <option value="google-ai-studio">Google AI Studio</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="ollama">Ollama</option>
-          </select>
-        </div>
-
-        <div class="field" id="field-apiKey">
-          <label for="apiKey">API Key</label>
-          <input type="password" id="apiKey" name="apiKey" placeholder="sk-..." autocomplete="off" />
-        </div>
-
-        <div class="field" id="field-baseUrl">
-          <label for="baseUrl">Base URL</label>
-          <input type="text" id="baseUrl" name="baseUrl" placeholder="https://api.openai.com/v1" />
-        </div>
-
-        <div class="field" id="field-host">
-          <label for="host">Host</label>
-          <input type="text" id="host" name="host" placeholder="http://localhost:11434" />
-        </div>
-
-        <div class="field">
-          <label for="model">Model</label>
-          <input type="text" id="model" name="model" placeholder="gpt-4o-mini" list="model-suggestions" />
-          <datalist id="model-suggestions"></datalist>
-        </div>
-
-        <label class="checkbox-label">
-          <input type="checkbox" id="webSearchEnabled" name="webSearchEnabled" />
-          Enable web search
-        </label>
-
-        <button type="submit" id="save-btn">Save</button>
-        <div id="status"></div>
-      </form>
-    </section>
-
-    <section class="card">
-      <h2>Shortcut Key</h2>
-      <p class="hint">Press a key combination to set the "Expand…" shortcut. At least one modifier (Ctrl, Alt, Shift) is required, except for function keys.</p>
-      <div class="shortcut-row">
-        <input type="text" id="shortcut" placeholder="Press a key combination…" readonly />
-        <button type="button" id="reset-shortcut">Reset to default</button>
+  <div class="app">
+    <nav class="sidebar">
+      <div class="sidebar-brand">Δ Delta AI</div>
+      <div class="sidebar-nav">
+        <button class="sidebar-tab active" data-tab="chat">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M2 2h12v9H5l-3 3V2z"/>
+          </svg>
+          Chat
+        </button>
+        <button class="sidebar-tab" data-tab="kb">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="8" cy="5" r="3"/>
+            <path d="M3 14c0-2.8 2.2-5 5-5s5 2.2 5 5"/>
+          </svg>
+          Knowledge Base
+        </button>
+        <button class="sidebar-tab" data-tab="settings">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <circle cx="8" cy="8" r="2.5"/>
+            <path d="M8 1v2m0 10v2M1 8h2m10 0h2M3.1 3.1l1.4 1.4m7 7l1.4 1.4M3.1 12.9l1.4-1.4m7-7l1.4-1.4"/>
+          </svg>
+          Settings
+        </button>
       </div>
-      <div id="shortcut-status"></div>
-    </section>
+    </nav>
 
-    <section class="card" id="kb-card">
-      <h2>Knowledge Base</h2>
-      <p class="hint">Your expansion history is saved locally and used to build a personalization prompt that tailors future AI responses to your learning preferences.</p>
+    <main class="main-content">
 
-      <div class="kb-status-bar">
-        <span id="kb-status-text">Loading…</span>
-        <div class="kb-buttons">
-          <button type="button" id="kb-analyze-btn" disabled>Analyze</button>
-          <button type="button" id="kb-reanalyze-btn" disabled>Re-Analyze</button>
+      <!-- ===== CHAT TAB ===== -->
+      <section id="tab-chat" class="tab-panel active">
+        <div class="chat-layout">
+          <aside class="chat-sidebar">
+            <div class="chat-sidebar-header">
+              <span class="chat-sidebar-title">Conversations</span>
+              <button class="icon-btn" id="chat-new-btn" title="New Chat">+</button>
+            </div>
+            <div class="chat-conv-list" id="chat-conv-list"></div>
+          </aside>
+          <div class="chat-main" id="chat-main">
+            <div class="chat-messages" id="chat-messages">
+              <div class="chat-empty">Start a new chat</div>
+            </div>
+            <div class="chat-composer">
+              <textarea id="chat-input" rows="1" placeholder="Type a message…" autofocus></textarea>
+              <button class="icon-btn send-btn" id="chat-send-btn" disabled>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M1 1l12 6-12 6 3-6z"/></svg>
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div id="kb-reanalyze-row" style="display: none;">
-        <label for="kb-reanalyze-count">Re-analyze the most recent</label>
-        <input type="number" id="kb-reanalyze-count" min="1" value="10" />
-        <span>expansion(s).</span>
-        <button type="button" id="kb-reanalyze-go">Go</button>
-        <button type="button" class="secondary" id="kb-reanalyze-cancel">Cancel</button>
-      </div>
+      <!-- ===== KNOWLEDGE BASE TAB ===== -->
+      <section id="tab-kb" class="tab-panel">
+        <div class="kb-page">
+          <header class="tab-header">
+            <h2>Knowledge Base</h2>
+            <p class="tab-subtitle">Your expansion history is analyzed to build a personalization prompt that tailors future AI responses to your learning preferences.</p>
+          </header>
 
-      <div id="kb-result"></div>
+          <div class="card">
+            <div class="kb-status-bar">
+              <span id="kb-status-text">Loading…</span>
+              <div class="kb-buttons">
+                <button type="button" id="kb-analyze-btn" disabled>Analyze</button>
+                <button type="button" id="kb-reanalyze-btn" disabled>Re-Analyze</button>
+              </div>
+            </div>
+            <div id="kb-reanalyze-row" style="display: none;">
+              <label for="kb-reanalyze-count">Re-analyze the most recent</label>
+              <input type="number" id="kb-reanalyze-count" min="1" value="10" />
+              <span>expansion(s).</span>
+              <button type="button" id="kb-reanalyze-go">Go</button>
+              <button type="button" class="secondary" id="kb-reanalyze-cancel">Cancel</button>
+            </div>
+            <div id="kb-result"></div>
+          </div>
 
-      <h3 class="kb-section-title">Personalized Lookup Prompt</h3>
-      <p class="hint">Generated by analyzing your expansion history. Injected into the system prompt for every expansion.</p>
-      <textarea id="kb-prompt-text" readonly rows="10" placeholder="Run analysis to generate a personalized system prompt…" spellcheck="false"></textarea>
+          <div class="card">
+            <h3 class="kb-section-title">Keywords</h3>
+            <div id="kb-keywords" class="kb-keywords-grid"></div>
+          </div>
 
-      <h3 class="kb-section-title">Keywords</h3>
-      <div id="kb-keywords" class="kb-keywords-grid"></div>
+          <div class="card">
+            <h3 class="kb-section-title">Personalized Lookup Prompt</h3>
+            <p class="hint">Generated by analyzing your expansion history. Injected into the system prompt for every expansion.</p>
+            <textarea id="kb-prompt-text" readonly rows="8" placeholder="Run analysis to generate a personalized system prompt…" spellcheck="false"></textarea>
+          </div>
 
-      <div class="kb-actions">
-        <button type="button" class="secondary" id="kb-clear-btn">Clear All Data</button>
-      </div>
-    </section>
+          <div class="kb-actions">
+            <button type="button" class="secondary" id="kb-clear-btn">Clear All Data</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== SETTINGS TAB ===== -->
+      <section id="tab-settings" class="tab-panel">
+        <div class="settings-page">
+          <header class="tab-header">
+            <h2>Settings</h2>
+            <p class="tab-subtitle">Configure your LLM provider and shortcut key.</p>
+          </header>
+
+          <div class="card">
+            <h3>Provider Settings</h3>
+            <form id="settings-form">
+              <div class="field">
+                <label for="providerType">Provider</label>
+                <select id="providerType" name="providerType">
+                  <option value="openai-compatible">OpenAI Compatible</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="google-ai-studio">Google AI Studio</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="ollama">Ollama</option>
+                </select>
+              </div>
+              <div class="field" id="field-apiKey">
+                <label for="apiKey">API Key</label>
+                <input type="password" id="apiKey" name="apiKey" placeholder="sk-..." autocomplete="off" />
+              </div>
+              <div class="field" id="field-baseUrl">
+                <label for="baseUrl">Base URL</label>
+                <input type="text" id="baseUrl" name="baseUrl" placeholder="https://api.openai.com/v1" />
+              </div>
+              <div class="field" id="field-host">
+                <label for="host">Host</label>
+                <input type="text" id="host" name="host" placeholder="http://localhost:11434" />
+              </div>
+              <div class="field">
+                <label for="model">Model</label>
+                <input type="text" id="model" name="model" placeholder="gpt-4o-mini" list="model-suggestions" />
+                <datalist id="model-suggestions"></datalist>
+              </div>
+              <label class="checkbox-label">
+                <input type="checkbox" id="webSearchEnabled" name="webSearchEnabled" />
+                Enable web search
+              </label>
+              <button type="submit" id="save-btn">Save</button>
+              <div id="status"></div>
+            </form>
+          </div>
+
+          <div class="card">
+            <h3>Shortcut Key</h3>
+            <p class="hint">Press a key combination to set the "Expand…" shortcut. At least one modifier (Ctrl, Alt, Shift) is required, except for function keys.</p>
+            <div class="shortcut-row">
+              <input type="text" id="shortcut" placeholder="Press a key combination…" readonly />
+              <button type="button" id="reset-shortcut">Reset to default</button>
+            </div>
+            <div id="shortcut-status"></div>
+          </div>
+        </div>
+      </section>
+
+    </main>
   </div>
 
   <script type="module" src="dashboard.js"></script>

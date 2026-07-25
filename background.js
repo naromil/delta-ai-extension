@@ -7,9 +7,10 @@
 import { callProviderStream } from './src/background/provider.js';
 import { loadConfig, saveConfig } from './src/background/config.js';
 import { buildExpandMessages } from './src/shared/expand-prompt.js';
-import { getSystemPrompt } from './src/shared/prompts.js';
+import { getSystemPrompt, buildScreenContextMessage } from './src/shared/prompts.js';
 import { loadKbPrompt, loadKbData, saveKbPrompt, saveKbKeywords, analyzeExpansions } from './src/background/kb.js';
 import { saveExpansionRecord, loadExpansionRecords, listUnfedExpansions, markExpansionKbFed, clearExpansionRecords } from './src/background/expansion-records.js';
+import { loadConversations, createConversation, updateConversation, deleteConversation } from './src/background/conversations.js';
 
 const activeStreams = new Map();
 
@@ -88,6 +89,58 @@ async function streamExpand(tabId, frameId, requestId, selection, context, promp
     } catch { /* tab gone */ }
   } finally {
     activeStreams.delete(requestId);
+  }
+}
+
+async function streamChat(tabId, conversationId, messages, turnId) {
+  const config = await loadConfig();
+  const kbPrompt = await loadKbPrompt();
+  let systemContent = getSystemPrompt('chat');
+  if (kbPrompt) {
+    systemContent = systemContent + '\n\n' + kbPrompt;
+  }
+
+  const fullMessages = [
+    { role: 'system', content: systemContent },
+    ...messages
+  ];
+
+  try {
+    let fullResponse = '';
+    for await (const chunk of callProviderStream(fullMessages, config)) {
+      fullResponse += chunk;
+      try {
+        await browser.tabs.sendMessage(tabId, {
+          type: 'chatStreamChunk',
+          conversationId,
+          turnId,
+          text: fullResponse,
+          done: false
+        });
+      } catch {
+        break;
+      }
+    }
+
+    try {
+      await browser.tabs.sendMessage(tabId, {
+        type: 'chatStreamChunk',
+        conversationId,
+        turnId,
+        text: fullResponse,
+        done: true
+      });
+    } catch { /* tab gone */ }
+  } catch (err) {
+    try {
+      await browser.tabs.sendMessage(tabId, {
+        type: 'chatStreamChunk',
+        conversationId,
+        turnId,
+        error: err?.message || 'Unknown error',
+        done: true
+      });
+    } catch { /* tab gone */ }
   }
 }
 
@@ -208,5 +261,55 @@ browser.runtime.onMessage.addListener((message, sender) => {
       await saveKbKeywords([]);
       return { ok: true };
     })();
+  }
+
+  if (message.type === 'chatLoadConversations') {
+    return loadConversations();
+  }
+
+  if (message.type === 'chatCreateConversation') {
+    return createConversation(message.title || 'New Chat', [], 'chat');
+  }
+
+  if (message.type === 'chatDeleteConversation') {
+    return deleteConversation(message.conversationId);
+  }
+
+  if (message.type === 'chatUpdateConversation') {
+    return updateConversation(message.conversationId, message.updates);
+  }
+
+  if (message.type === 'chatSend') {
+    const tabId = sender.tab?.id;
+    if (!tabId) return false;
+    streamChat(tabId, message.conversationId, message.messages, message.turnId);
+    return false;
+  }
+
+  if (message.type === 'transferExpansion') {
+    (async () => {
+      const title = (message.prompt || message.selection).slice(0, 60);
+      const turns = [];
+      if (message.context) {
+        turns.push({ id: crypto.randomUUID(), role: 'user', content: buildScreenContextMessage(message.context) });
+      }
+      turns.push({ id: crypto.randomUUID(), role: 'user', content: message.prompt || message.selection });
+      turns.push({ id: crypto.randomUUID(), role: 'assistant', content: message.response });
+      const conv = await createConversation(title, turns, 'expansion');
+
+      const dashUrl = browser.runtime.getURL('dashboard/dashboard.html');
+      const tabs = await browser.tabs.query({ url: dashUrl });
+      if (tabs.length > 0) {
+        const tab = tabs[0];
+        await browser.tabs.update(tab.id, { active: true });
+        await browser.tabs.sendMessage(tab.id, {
+          type: 'chatSelectConversation',
+          conversationId: conv.id
+        });
+      } else {
+        await browser.tabs.create({ url: dashUrl });
+      }
+    })();
+    return false;
   }
 });

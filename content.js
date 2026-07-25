@@ -13,6 +13,7 @@
   /* ---- State ---- */
 
   var popups = new Map(); // requestId -> { el: HTMLElement }
+  var popupResponseText = new Map(); // requestId -> full response text
   var promptInputEl = null;
   var lastClickX = 0;
   var lastClickY = 0;
@@ -97,7 +98,7 @@
 
   /* ---- Multiple Popups ---- */
 
-  function createPopup(rect, requestId) {
+  function createPopup(rect, requestId, expandData) {
     popupCounter++;
 
     var el = document.createElement('div');
@@ -110,6 +111,25 @@
     var title = document.createElement('span');
     title.className = 'delta-popup-title';
     title.textContent = 'Expand';
+    var transferBtn = document.createElement('span');
+    transferBtn.className = 'delta-popup-transfer';
+    transferBtn.textContent = 'Send to Chat';
+    transferBtn.title = 'Send this expansion to the Chat tab';
+    transferBtn.style.display = 'none';
+    transferBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var data = expandData || {};
+      var responseText = popupResponseText.get(requestId) || '';
+      browser.runtime.sendMessage({
+        type: 'transferExpansion',
+        selection: data.selection || '',
+        context: data.context || '',
+        prompt: data.prompt || '',
+        response: responseText
+      });
+      transferBtn.textContent = 'Sent';
+      transferBtn.style.pointerEvents = 'none';
+    });
     var close = document.createElement('span');
     close.className = 'delta-popup-close';
     close.textContent = '\u00d7';
@@ -117,6 +137,7 @@
       dismissPopup(requestId);
     });
     header.appendChild(title);
+    header.appendChild(transferBtn);
     header.appendChild(close);
     el.appendChild(header);
 
@@ -169,6 +190,11 @@
     } else {
       body.className = 'delta-popup-body';
       body.textContent = text || '\u200b';
+      popupResponseText.set(requestId, text || '');
+    }
+    if (done) {
+      var transferBtn = entry.el.querySelector('.delta-popup-transfer');
+      if (transferBtn) transferBtn.style.display = '';
     }
   }
 
@@ -178,6 +204,7 @@
     browser.runtime.sendMessage({ type: 'abort', requestId: requestId });
     removeEl(entry.el);
     popups.delete(requestId);
+    popupResponseText.delete(requestId);
   }
 
   function dismissTopPopup() {
@@ -228,7 +255,11 @@
       promptInputEl = null;
 
       requestId = crypto.randomUUID();
-      createPopup(data.rect, requestId);
+      createPopup(data.rect, requestId, {
+        selection: data.selection,
+        context: data.context,
+        prompt: val || undefined
+      });
       browser.runtime.sendMessage({
         type: 'expandRequest',
         requestId: requestId,
@@ -277,15 +308,11 @@
     if (msg.type === 'expandChunk') {
       var entry = popups.get(msg.requestId);
       if (!entry) return;
-      var body = entry.el.querySelector('.delta-popup-body');
-      if (!body) return;
       if (msg.error) {
-        body.className = 'delta-popup-body delta-error';
-        body.textContent = msg.error;
+        updatePopup(msg.requestId, msg.error, msg.done, true);
         return;
       }
-      body.className = 'delta-popup-body';
-      body.textContent = msg.text || '\u200b';
+      updatePopup(msg.requestId, msg.text, msg.done, false);
       return;
     }
   });
