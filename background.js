@@ -86,12 +86,6 @@ function registerContextMenus() {
 
 registerContextMenus();
 
-/* ---- Open dashboard on toolbar button click ---- */
-
-browser.action.onClicked.addListener(() => {
-  browser.tabs.create({ url: 'dashboard/dashboard.html' });
-});
-
 let reqCtr = 0;
 function genRequestId() {
   return 'rx_' + Date.now() + '_' + (reqCtr++);
@@ -152,6 +146,11 @@ browser.runtime.onMessage.addListener((message, sender) => {
 
   if (message.type === 'abort') {
     abortStream(message.requestId);
+    return false;
+  }
+
+  if (message.type === 'openSettings') {
+    browser.tabs.create({ url: 'dashboard/dashboard.html' });
     return false;
   }
 });

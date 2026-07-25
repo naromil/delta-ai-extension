@@ -8,48 +8,27 @@
 <body>
   <div class="container">
     <header>
-      <h1>Delta AI Expand</h1>
-      <p class="subtitle">Configure your LLM provider for text expansions.</p>
+      <h1>Δ Delta AI Expand</h1>
     </header>
 
-    <form id="settings-form">
-      <label for="providerType">Provider</label>
-      <select id="providerType" name="providerType">
-        <option value="openai-compatible">OpenAI Compatible</option>
-        <option value="openai">OpenAI</option>
-        <option value="google-ai-studio">Google AI Studio</option>
-        <option value="openrouter">OpenRouter</option>
-        <option value="ollama">Ollama</option>
-      </select>
-
-      <div id="field-apiKey">
-        <label for="apiKey">API Key</label>
-        <input type="password" id="apiKey" name="apiKey" placeholder="sk-..." autocomplete="off" />
+    <div class="status">
+      <div class="row">
+        <span class="label">Provider</span>
+        <span class="value" id="provider-label">—</span>
       </div>
-
-      <div id="field-baseUrl">
-        <label for="baseUrl">Base URL</label>
-        <input type="text" id="baseUrl" name="baseUrl" placeholder="https://api.openai.com/v1" />
+      <div class="row">
+        <span class="label">Model</span>
+        <span class="value" id="model-label">—</span>
       </div>
-
-      <div id="field-host">
-        <label for="host">Host</label>
-        <input type="text" id="host" name="host" placeholder="http://localhost:11434" />
+      <div class="row">
+        <span class="label">Shortcut</span>
+        <span class="value" id="shortcut-label">—</span>
       </div>
+    </div>
 
-      <label for="model">Model</label>
-      <input type="text" id="model" name="model" placeholder="gpt-4o-mini" list="model-suggestions" />
-      <datalist id="model-suggestions"></datalist>
+    <div class="hint">Select text on any page, then press the shortcut or right-click <strong>Expand…</strong></div>
 
-      <label class="checkbox-label">
-        <input type="checkbox" id="webSearchEnabled" name="webSearchEnabled" />
-        Enable web search
-      </label>
-
-      <button type="submit" id="save-btn">Save</button>
-    </form>
-
-    <div id="status"></div>
+    <button id="settings-btn">Settings</button>
   </div>
 
   <script type="module" src="popup.js"></script>

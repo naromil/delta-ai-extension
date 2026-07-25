@@ -9,7 +9,7 @@
       "strict_min_version": "115.0"
     }
   },
-  "permissions": ["storage", "contextMenus", "clipboardWrite"],
+  "permissions": ["storage", "contextMenus", "clipboardWrite", "tabs"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "scripts": ["background.js"],
@@ -33,6 +33,7 @@
     }
   },
   "action": {
+    "default_popup": "popup/popup.html",
     "default_title": "Delta AI Expand"
   },
   "options_ui": {

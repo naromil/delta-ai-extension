@@ -1,111 +1,57 @@
 import { providerRegistry } from '../src/shared/models.js';
 
-const KNOWN_MODELS = {};
+const STORAGE_KEY = 'deltaConfig';
+const COMMAND_NAME = 'expand';
 
-// Flatten knownModels from providerRegistry for datalist suggestions
-for (const [ptype, reg] of Object.entries(providerRegistry)) {
-  if (reg.knownModels) {
-    KNOWN_MODELS[ptype] = reg.knownModels;
-  }
-}
+document.getElementById('settings-btn').addEventListener('click', () => {
+  browser.runtime.sendMessage({ type: 'openSettings' });
+});
 
 async function loadConfig() {
   try {
-    return await browser.runtime.sendMessage({ type: 'loadConfig' });
-  } catch {
-    return null;
-  }
+    const obj = await browser.storage.local.get(STORAGE_KEY);
+    const stored = obj[STORAGE_KEY];
+    if (stored && typeof stored === 'object') {
+      return { providerType: 'openai-compatible', apiKey: '', baseUrl: '', host: '', model: '', webSearchEnabled: false, ...stored };
+    }
+  } catch { /* ignore */ }
+  return null;
 }
 
-async function saveConfig(config) {
+async function loadShortcut() {
   try {
-    const result = await browser.runtime.sendMessage({ type: 'saveConfig', config });
-    return result;
-  } catch {
-    return false;
-  }
+    const commands = await browser.commands.getAll();
+    const cmd = commands.find(c => c.name === COMMAND_NAME);
+    return cmd?.shortcut || '';
+  } catch { /* ignore */ }
+  return '';
 }
 
-function showStatus(msg, error) {
-  const el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = error ? 'error' : 'ok';
-  setTimeout(() => { el.className = ''; el.textContent = ''; }, 2500);
-}
-
-function updateSuggestions(providerType) {
-  const datalist = document.getElementById('model-suggestions');
-  datalist.innerHTML = '';
-  const models = KNOWN_MODELS[providerType] || [];
-  for (const m of models) {
-    const opt = document.createElement('option');
-    opt.value = m;
-    datalist.appendChild(opt);
-  }
-}
-
-function updateFieldVisibility(providerType) {
-  const reg = providerRegistry[providerType];
-  const authShape = reg ? reg.authShape : 'apiKey';
-
-  const apiField = document.getElementById('field-apiKey');
-  const urlField = document.getElementById('field-baseUrl');
-  const hostField = document.getElementById('field-host');
-
-  apiField.style.display = authShape === 'apiKey' ? '' : 'none';
-  urlField.style.display = (providerType === 'openai-compatible' || providerType === 'openrouter') ? '' : 'none';
-  hostField.style.display = authShape === 'host' ? '' : 'none';
-
-  // Show web search toggle based on capability
-  const wsCheck = document.getElementById('webSearchEnabled');
-  const wsLabel = wsCheck.parentElement;
-  wsLabel.style.display = reg && reg.capabilities && reg.capabilities.webSearch ? '' : 'none';
+function setMissing(elId, missing) {
+  const el = document.getElementById(elId);
+  if (missing) el.classList.add('missing');
+  else el.classList.remove('missing');
 }
 
 (async () => {
-  const form = document.getElementById('settings-form');
-  const providerSelect = document.getElementById('providerType');
-  const modelInput = document.getElementById('model');
-
   const config = await loadConfig();
+  const shortcut = await loadShortcut();
+
+  const providerEl = document.getElementById('provider-label');
+  const modelEl = document.getElementById('model-label');
+  const shortcutEl = document.getElementById('shortcut-label');
+
   if (config) {
-    providerSelect.value = config.providerType || 'openai-compatible';
-    document.getElementById('apiKey').value = config.apiKey || '';
-    document.getElementById('baseUrl').value = config.baseUrl || '';
-    document.getElementById('host').value = config.host || '';
-    modelInput.value = config.model || '';
-    document.getElementById('webSearchEnabled').checked = !!config.webSearchEnabled;
-    updateFieldVisibility(config.providerType || 'openai-compatible');
-    updateSuggestions(config.providerType || 'openai-compatible');
+    const reg = providerRegistry[config.providerType];
+    providerEl.textContent = reg ? reg.label : config.providerType;
+    modelEl.textContent = config.model || '(not set)';
+    setMissing(modelEl, !config.model);
   } else {
-    updateFieldVisibility('openai-compatible');
-    updateSuggestions('openai-compatible');
+    providerEl.textContent = 'Not configured';
+    setMissing(providerEl, true);
+    modelEl.textContent = '—';
   }
 
-  providerSelect.addEventListener('change', () => {
-    const ptype = providerSelect.value;
-    updateFieldVisibility(ptype);
-    updateSuggestions(ptype);
-    modelInput.value = '';
-  });
-
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const newConfig = {
-      providerType: providerSelect.value,
-      apiKey: document.getElementById('apiKey').value.trim(),
-      baseUrl: document.getElementById('baseUrl').value.trim(),
-      host: document.getElementById('host').value.trim(),
-      model: modelInput.value.trim(),
-      webSearchEnabled: document.getElementById('webSearchEnabled').checked
-    };
-
-    const ok = await saveConfig(newConfig);
-    if (ok && ok.success !== false) {
-      showStatus('Saved.', false);
-    } else {
-      showStatus('Save failed. Check the console.', true);
-    }
-  });
+  shortcutEl.textContent = shortcut || '(not set)';
+  setMissing(shortcutEl, !shortcut);
 })();
