@@ -157,8 +157,18 @@ function trimByCategory(keywords) {
 
 async function callProviderNonStream(messages) {
   const config = await loadConfig();
+  const effectiveConfig = (config.kbProviderType || config.kbModel)
+    ? {
+        providerType: config.kbProviderType || config.providerType,
+        apiKey: config.kbApiKey || config.apiKey,
+        model: config.kbModel || config.model,
+        baseUrl: config.kbBaseUrl || config.baseUrl,
+        host: config.kbHost || config.host,
+        webSearchEnabled: false
+      }
+    : config;
   let fullResponse = '';
-  for await (const chunk of callProviderStream(messages, config)) {
+  for await (const chunk of callProviderStream(messages, effectiveConfig)) {
     fullResponse += chunk;
   }
   return fullResponse.trim();

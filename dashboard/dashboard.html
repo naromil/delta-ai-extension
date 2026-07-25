@@ -108,11 +108,12 @@
         <div class="settings-page">
           <header class="tab-header">
             <h2>Settings</h2>
-            <p class="tab-subtitle">Configure your LLM provider and shortcut key.</p>
+            <p class="tab-subtitle">Configure your LLM providers and shortcut key.</p>
           </header>
 
           <div class="card">
-            <h3>Provider Settings</h3>
+            <h3>Chat &amp; Expansion Provider</h3>
+            <p class="hint">Used for chat messages in the Chat tab and inline expansions on web pages.</p>
             <form id="settings-form">
               <div class="field">
                 <label for="providerType">Provider</label>
@@ -147,6 +148,43 @@
               </label>
               <button type="submit" id="save-btn">Save</button>
               <div id="status"></div>
+            </form>
+          </div>
+
+          <div class="card">
+            <h3>KB Maintenance Provider</h3>
+            <p class="hint">Used only for Knowledge Base analysis. Leave any field empty to fall back to the Chat &amp; Expansion provider.</p>
+            <form id="kb-settings-form">
+              <div class="field">
+                <label for="kbProviderType">Provider</label>
+                <select id="kbProviderType" name="kbProviderType">
+                  <option value="">Same as Chat</option>
+                  <option value="openai-compatible">OpenAI Compatible</option>
+                  <option value="openai">OpenAI</option>
+                  <option value="google-ai-studio">Google AI Studio</option>
+                  <option value="openrouter">OpenRouter</option>
+                  <option value="ollama">Ollama</option>
+                </select>
+              </div>
+              <div class="field" id="kb-field-apiKey">
+                <label for="kbApiKey">API Key</label>
+                <input type="password" id="kbApiKey" name="kbApiKey" placeholder="Leave empty to use Chat API key" autocomplete="off" />
+              </div>
+              <div class="field" id="kb-field-baseUrl">
+                <label for="kbBaseUrl">Base URL</label>
+                <input type="text" id="kbBaseUrl" name="kbBaseUrl" placeholder="Leave empty to use Chat Base URL" />
+              </div>
+              <div class="field" id="kb-field-host">
+                <label for="kbHost">Host</label>
+                <input type="text" id="kbHost" name="kbHost" placeholder="Leave empty to use Chat Host" />
+              </div>
+              <div class="field">
+                <label for="kbModel">Model</label>
+                <input type="text" id="kbModel" name="kbModel" placeholder="Leave empty to use Chat model" list="kb-model-suggestions" />
+                <datalist id="kb-model-suggestions"></datalist>
+              </div>
+              <button type="submit" id="kb-save-btn">Save</button>
+              <div id="kb-status"></div>
             </form>
           </div>
 

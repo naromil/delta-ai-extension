@@ -59,7 +59,12 @@ function createDefaultConfig() {
     baseUrl: '',
     host: '',
     model: '',
-    webSearchEnabled: false
+    webSearchEnabled: false,
+    kbProviderType: '',
+    kbApiKey: '',
+    kbBaseUrl: '',
+    kbHost: '',
+    kbModel: ''
   };
 }
 
@@ -575,6 +580,81 @@ async function initProviderConfig() {
   });
 }
 
+function updateKbSuggestions(providerType) {
+  const datalist = document.getElementById('kb-model-suggestions');
+  datalist.innerHTML = '';
+  const models = KNOWN_MODELS[providerType] || [];
+  for (const m of models) {
+    const opt = document.createElement('option');
+    opt.value = m;
+    datalist.appendChild(opt);
+  }
+}
+
+function updateKbFieldVisibility(providerType) {
+  if (!providerType) {
+    document.getElementById('kb-field-apiKey').style.display = 'none';
+    document.getElementById('kb-field-baseUrl').style.display = 'none';
+    document.getElementById('kb-field-host').style.display = 'none';
+    return;
+  }
+  const reg = providerRegistry[providerType];
+  const authShape = reg ? reg.authShape : 'apiKey';
+  document.getElementById('kb-field-apiKey').style.display = authShape === 'apiKey' ? '' : 'none';
+  document.getElementById('kb-field-baseUrl').style.display = (providerType === 'openai-compatible' || providerType === 'openrouter') ? '' : 'none';
+  document.getElementById('kb-field-host').style.display = authShape === 'host' ? '' : 'none';
+}
+
+async function initKbProviderConfig() {
+  const providerSelect = document.getElementById('kbProviderType');
+  const modelInput = document.getElementById('kbModel');
+
+  const config = await loadConfig();
+  providerSelect.value = config.kbProviderType || '';
+  document.getElementById('kbApiKey').value = config.kbApiKey || '';
+  document.getElementById('kbBaseUrl').value = config.kbBaseUrl || '';
+  document.getElementById('kbHost').value = config.kbHost || '';
+  modelInput.value = config.kbModel || '';
+  updateKbFieldVisibility(config.kbProviderType || '');
+  if (config.kbProviderType) {
+    updateKbSuggestions(config.kbProviderType);
+  } else {
+    updateKbSuggestions(config.providerType || 'openai-compatible');
+  }
+
+  providerSelect.addEventListener('change', () => {
+    const ptype = providerSelect.value;
+    updateKbFieldVisibility(ptype);
+    if (ptype) {
+      updateKbSuggestions(ptype);
+    } else {
+      updateKbSuggestions(document.getElementById('providerType').value);
+    }
+    modelInput.value = '';
+  });
+
+  document.getElementById('kb-settings-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const kbConfig = {
+      kbProviderType: providerSelect.value,
+      kbApiKey: document.getElementById('kbApiKey').value.trim(),
+      kbBaseUrl: document.getElementById('kbBaseUrl').value.trim(),
+      kbHost: document.getElementById('kbHost').value.trim(),
+      kbModel: modelInput.value.trim()
+    };
+
+    const existingConfig = await loadConfig();
+    const merged = { ...existingConfig, ...kbConfig };
+    try {
+      await browser.storage.local.set({ [STORAGE_KEY]: { ...createDefaultConfig(), ...merged } });
+      showStatus('kb-status', 'Saved.', false);
+    } catch {
+      showStatus('kb-status', 'Save failed.', true);
+    }
+  });
+}
+
 function formatShortcut(e) {
   const parts = [];
   if (isMac && e.metaKey) parts.push('Command');
@@ -648,5 +728,6 @@ async function initShortcutConfig() {
 
 initChat();
 initProviderConfig();
+initKbProviderConfig();
 initShortcutConfig();
 initKnowledgeBase();
