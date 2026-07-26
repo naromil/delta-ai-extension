@@ -28,6 +28,11 @@ export async function markExpansionKbFed(id) {
   const record = records.find(r => r.id === id);
   if (record) record.kbFed = true;
   await browser.storage.local.set({ [STORAGE_KEY]: records });
+  /* Note: records are KEPT in storage after KB analysis — only the
+   * `kbFed` flag is set. This differs from ref_src's
+   * markConversationKbFed, which deletes source:'lookup' conversations
+   * after analysis. Records are only removed by clearExpansionRecords()
+   * (the explicit KB "Clear" button) or by the 200-record cap. */
 }
 
 export async function clearExpansionRecords() {

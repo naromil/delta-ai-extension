@@ -11,6 +11,7 @@ import { getSystemPrompt, buildScreenContextMessage } from './src/shared/prompts
 import { loadKbPrompt, loadKbData, saveKbPrompt, saveKbKeywords, analyzeExpansions } from './src/background/kb.js';
 import { saveExpansionRecord, loadExpansionRecords, listUnfedExpansions, markExpansionKbFed, clearExpansionRecords } from './src/background/expansion-records.js';
 import { loadConversations, createConversation, updateConversation, deleteConversation } from './src/background/conversations.js';
+import { loadPageBubbles, addOrUpdateBubble, removeBubble, clearPageBubbles } from './src/shared/bubble-store.js';
 
 const activeStreams = new Map();
 
@@ -284,6 +285,26 @@ browser.runtime.onMessage.addListener((message, sender) => {
     if (!tabId) return false;
     streamChat(tabId, message.conversationId, message.messages, message.turnId);
     return false;
+  }
+
+  if (message.type === 'bubbleLoad') {
+    const frameId = typeof sender.frameId === 'number' ? sender.frameId : 0;
+    return loadPageBubbles(message.url, frameId);
+  }
+
+  if (message.type === 'bubblePersist') {
+    const frameId = typeof sender.frameId === 'number' ? sender.frameId : 0;
+    return addOrUpdateBubble(message.url, frameId, message.bubble);
+  }
+
+  if (message.type === 'bubbleRemove') {
+    const frameId = typeof sender.frameId === 'number' ? sender.frameId : 0;
+    return removeBubble(message.url, frameId, message.bubbleId);
+  }
+
+  if (message.type === 'bubbleClearPage') {
+    const frameId = typeof sender.frameId === 'number' ? sender.frameId : 0;
+    return clearPageBubbles(message.url, frameId);
   }
 
   if (message.type === 'transferExpansion') {

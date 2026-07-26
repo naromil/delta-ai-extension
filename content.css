@@ -166,6 +166,7 @@
   color: var(--delta-text-3);
   font-style: italic;
   font-size: calc(1em - 1px);
+}
 
 /* ---- Nested sub-bubble ----
  * The sub-bubble must NOT inflate its parent frame. We make it:

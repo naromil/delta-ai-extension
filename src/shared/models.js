@@ -7,7 +7,7 @@ export const providerRegistry = {
     defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     capabilities: { webSearch: true },
     implemented: true,
-    knownModels: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemma-3-27b-it']
+    knownModels: ['gemini-3.6-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemma-4-31b-it']
   },
   'openai-compatible': {
     label: 'OpenAI Compatible',
@@ -28,7 +28,7 @@ export const providerRegistry = {
     authShape: 'host',
     capabilities: { webSearch: false },
     implemented: true,
-    knownModels: ['qwen3:4b', 'gemma3:4b', 'llama3.2:1b', 'llama3.2:3b']
+    knownModels: ['qwen3:4b', 'gemma4:31b', 'llama3.2:1b', 'llama3.2:3b']
   },
   openrouter: {
     label: 'OpenRouter',
@@ -36,7 +36,7 @@ export const providerRegistry = {
     defaultBaseUrl: 'https://openrouter.ai/api/v1',
     capabilities: { webSearch: true },
     implemented: true,
-    knownModels: ['google/gemini-2.5-flash', 'openai/gpt-4o-mini', 'openai/gpt-4.1-mini']
+    knownModels: ['google/gemini-3.6-flash', 'openai/gpt-4o-mini', 'openai/gpt-4.1-mini']
   }
 };
 
