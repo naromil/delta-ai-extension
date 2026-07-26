@@ -1,4 +1,4 @@
-/* ---- CSS Custom Properties (matches base.css dark theme) ---- */
+/* ---- CSS Custom Properties (default = dark theme) ---- */
 
 .delta-bubble,
 .delta-bubble-marker,
@@ -8,44 +8,69 @@
   --delta-surface-2: #2c2d36;
   --delta-surface-3: #34354a;
   --delta-border: rgba(255, 255, 255, 0.07);
-  --delta-border-strong: rgba(255, 255, 255, 0.12);
+  --delta-border-strong: rgba(255, 255, 255, 0.18);
   --delta-text-1: rgba(238, 238, 245, 0.92);
   --delta-text-2: rgba(228, 230, 240, 0.62);
   --delta-text-3: rgba(228, 230, 240, 0.4);
   --delta-text-muted: rgba(228, 230, 240, 0.45);
   --delta-accent: #8aa0b8;
   --delta-accent-soft: rgba(138, 160, 184, 0.18);
-  --delta-error: #cf7b6e;
   --delta-marker: rgba(138, 160, 184, 0.28);
   --delta-marker-hover: rgba(138, 160, 184, 0.5);
-  --delta-radius-sm: 8px;
-  --delta-radius-md: 12px;
-  --delta-shadow-2: 0 6px 22px rgba(0, 0, 0, 0.22);
+  --delta-error: #cf7b6e;
+  --delta-radius-sm: 6px;
+  --delta-radius-md: 10px;
+  --delta-shadow-2: 0 4px 14px rgba(0, 0, 0, 0.18);
   --delta-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --delta-control-fs: 13px;
+}
+
+/* ---- Light theme override ----
+ * Set on :root via content.js when the host page is in a light theme.
+ * Only the variables change — the layout / spacing / typography stay identical. */
+:root.delta-theme-light .delta-bubble,
+:root.delta-theme-light .delta-bubble-marker,
+:root.delta-theme-light #delta-expandPrompt {
+  --delta-bg: #ffffff;
+  --delta-surface-1: #f5f5f7;
+  --delta-surface-2: #fafafb;
+  --delta-surface-3: #eeeef1;
+  --delta-border: rgba(0, 0, 0, 0.08);
+  --delta-border-strong: rgba(0, 0, 0, 0.16);
+  --delta-text-1: rgba(20, 20, 30, 0.92);
+  --delta-text-2: rgba(40, 40, 55, 0.62);
+  --delta-text-3: rgba(40, 40, 55, 0.38);
+  --delta-text-muted: rgba(40, 40, 55, 0.45);
+  --delta-accent: #4a6fa5;
+  --delta-accent-soft: rgba(74, 111, 165, 0.12);
+  --delta-marker: rgba(74, 111, 165, 0.15);
+  --delta-marker-hover: rgba(74, 111, 165, 0.32);
+  --delta-error: #c0392b;
+  --delta-shadow-2: 0 4px 14px rgba(0, 0, 0, 0.08);
 }
 
 /* ---- Inline bubble ----
- * Rendered inline-block so surrounding text wraps around it.
- * The bubble is the result container; it grows with its content.
- */
+ * Displayed inline-block so it sits in the text flow. Width is shrink-to-fit
+ * so a short answer doesn't leave a wide gap in the surrounding text. */
 
 .delta-bubble {
   display: inline-block;
   vertical-align: baseline;
   background: var(--delta-surface-2);
-  border: 1px solid var(--delta-accent);
+  border: 1px solid var(--delta-border-strong);
   border-radius: var(--delta-radius-sm);
   box-shadow: var(--delta-shadow-2);
   font-family: var(--delta-font);
-  font-size: 14px;
+  font-size: calc(1em - 1px);   /* 1 px smaller than surrounding text */
   line-height: 1.5;
   color: var(--delta-text-1);
-  min-width: 160px;
-  max-width: min(420px, 90%);
-  margin: 2px 6px;
+  width: fit-content;          /* shrink to content; no large gaps */
+  min-width: 0;                /* allow shrinking below the default 120px */
+  max-width: min(420px, 100%);
+  margin: 0 1px;               /* tight gap between frames and surrounding text */
   padding: 0;
   user-select: text;
-  animation: delta-fade-in 0.15s ease;
+  animation: delta-fade-in 0.12s ease;
   position: relative;
 }
 
@@ -58,93 +83,122 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 12px;
-  gap: 8px;
+  padding: 1px 4px 1px 8px;        /* tight header padding */
+  gap: 4px;
   border-bottom: 1px solid var(--delta-border);
+  line-height: 1.2;                /* matches control glyph size */
+  min-height: 18px;
 }
 
 .delta-bubble-title {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--delta-text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-weight: 500;                /* lighter than before */
+  color: var(--delta-text-2);      /* de-emphasized vs body */
   flex: 1;
   cursor: help;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 240px;
+  letter-spacing: 0;
+  text-transform: none;            /* no more ALL CAPS */
 }
 
 .delta-bubble-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
   flex: 0 0 auto;
 }
 
-.delta-bubble-transfer {
-  cursor: pointer;
-  color: var(--delta-accent);
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--delta-accent-soft);
-  transition: background 0.15s;
-}
-
-.delta-bubble-transfer:hover {
-  background: rgba(138, 160, 184, 0.3);
-}
-
+.delta-bubble-transfer,
 .delta-bubble-close {
+  background: transparent;
+  border: none;
+  padding: 2px 4px;
+  margin: 0;
   cursor: pointer;
   color: var(--delta-text-3);
-  font-size: 16px;
+  font-size: var(--delta-control-fs);
   line-height: 1;
-  padding: 0 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 3px;
+  font-family: inherit;
+  transition: background 0.12s, color 0.12s;
 }
 
+.delta-bubble-transfer svg {
+  display: block;
+  /* Inherit currentColor for the stroke. */
+}
+
+.delta-bubble-transfer:hover,
 .delta-bubble-close:hover {
   color: var(--delta-text-1);
+  background: var(--delta-accent-soft);
 }
 
-/* Body: holds the explanation text and any nested sub-bubbles */
+.delta-bubble-transfer-done {
+  color: var(--delta-accent);
+  opacity: 0.6;
+}
+
+/* Body — the actual explanation text + any nested sub-bubbles.
+ * Bottom padding is added back by `.delta-bubble-body--text-only` when the
+ * body has no nested sub-bubble, so a nested sub-bubble can sit flush
+ * against the parent frame's bottom border. */
 .delta-bubble-body {
-  padding: 10px 12px;
+  padding: 2px 8px 0;
   white-space: pre-wrap;
   word-break: break-word;
-  /* Allow text + sub-bubbles to flow inline within this body */
+}
+
+.delta-bubble-body--text-only {
+  padding-bottom: 5px;
 }
 
 .delta-bubble-body.delta-error {
   color: var(--delta-error);
 }
 
-/* Spinner shown while waiting for first chunk */
 .delta-bubble-spinner {
   color: var(--delta-text-3);
   font-style: italic;
-}
+  font-size: calc(1em - 1px);
 
 /* ---- Nested sub-bubble ----
- * Inherits the bubble look; indents slightly to show hierarchy.
- * Sub-bubbles are full .delta-bubble elements rendered inside a parent body.
- */
-
+ * The sub-bubble must NOT inflate its parent frame. We make it:
+ *  - display: block  (sits in its own line within the parent's body),
+ *  - width: fit-content (shrink to its own content),
+ *  - max-width: 100% (never wider than the parent's content area),
+ *  - min-width: 0 (no minimum that would inflate the parent).
+ * The result: the parent only grows if its own text content grows. */
 .delta-bubble .delta-bubble {
-  margin: 4px 0;
+  margin: 0;
   display: block;
-  /* block inside body so it occupies its own line; surrounding text
-   * in the parent body still wraps above/below it */
+  width: fit-content;
+  min-width: 0;
+  max-width: 100%;
+  /* Sit flush against the parent body's bottom edge so the two outlines
+   * appear adjacent. */
+  vertical-align: top;
 }
 
-/* ---- Folded marker ----
- * When folded, the bubble is removed and replaced by this marker
- * which is a colored inline span over the original queried text.
- */
+/* Sub-bubble title is a bit more compact. */
+.delta-bubble .delta-bubble .delta-bubble-header {
+  padding: 1px 4px;
+}
+
+.delta-bubble .delta-bubble .delta-bubble-title {
+  font-weight: 500;
+}
+
+.delta-bubble .delta-bubble .delta-bubble-body {
+  padding: 2px 7px 4px;
+}
+
+/* ---- Folded marker ---- */
 
 .delta-bubble-marker {
   display: inline;
@@ -157,8 +211,7 @@
   cursor: pointer;
   vertical-align: baseline;
   user-select: text;
-  /* Ensure pointer changes on hover to hint click-to-expand */
-  transition: background 0.15s;
+  transition: background 0.12s;
 }
 
 .delta-bubble-marker:hover {
@@ -166,10 +219,16 @@
 }
 
 .delta-bubble-marker::before {
-  content: "\25B8"; /* ▸ */
+  content: "\25B8";
   font-size: 0.85em;
   color: var(--delta-accent);
   margin-right: 3px;
+}
+
+/* Hidden adjacent punctuation wrapper — used so the frame sits flush
+ * against the surrounding text. */
+.delta-adj-hidden {
+  display: none;
 }
 
 /* ---- Expand Prompt Input ---- */

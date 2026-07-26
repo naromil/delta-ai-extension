@@ -41,6 +41,78 @@
   var lastSubParentEntry = null; // bubble body whose selection should host the next sub-expand
   var idCounter = 0;
 
+  /* ---- Theme detection ----
+   * We pick a theme per host page (light vs dark) so our bubbles blend in.
+   * Detection priority:
+   *   1. The host page's effective body background color (most reliable — it
+   *      reflects whatever the page actually rendered).
+   *   2. Falls back to `prefers-color-scheme` when the body has a transparent
+   *      background (e.g., a page that paints its background on a child
+   *      element or via an image we can't easily inspect here).
+   *
+   * The detected theme is applied once on init via a class on
+   * `document.documentElement`. CSS switches the delta-* variables when the
+   * class is present. Both existing and future bubbles inherit the variables.
+   */
+
+  /** Parse "rgb(r,g,b)" or "rgba(r,g,b,a)" into {r,g,b} or null. */
+  function parseRgb(str) {
+    if (!str) return null;
+    var m = String(str).match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
+    if (!m) return null;
+    return { r: +m[1], g: +m[2], b: +m[3] };
+  }
+
+  /** Relative luminance per Rec. 709 — good enough to pick a theme. */
+  function rgbLuminance(rgb) {
+    if (!rgb) return null;
+    return (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
+  }
+
+  /** Walk up from a node to find the first ancestor (including itself) that
+   *  has a non-transparent background color. */
+  function effectiveBackgroundOf(node) {
+    var el = node;
+    while (el && el.nodeType === 1) {
+      try {
+        var bg = window.getComputedStyle(el).backgroundColor;
+        var rgb = parseRgb(bg);
+        if (rgb && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
+          return rgb;
+        }
+      } catch (e) { /* cross-origin or detached — keep walking */ }
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  /** Returns 'light' or 'dark' based on the host page's theme. */
+  function detectPageTheme() {
+    try {
+      var rgb = effectiveBackgroundOf(document.body) ||
+                effectiveBackgroundOf(document.documentElement);
+      if (rgb) {
+        return rgbLuminance(rgb) > 0.5 ? 'light' : 'dark';
+      }
+    } catch (e) { /* ignore */ }
+    // Fallback: OS preference.
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+      return 'light';
+    }
+    return 'dark';
+  }
+
+  /** Apply the detected theme by toggling a class on <html>. Idempotent. */
+  function applyPageTheme() {
+    var theme = detectPageTheme();
+    var root = document.documentElement;
+    if (theme === 'light') {
+      root.classList.add('delta-theme-light');
+    } else {
+      root.classList.remove('delta-theme-light');
+    }
+  }
+
   /* ---- DOM Helpers ---- */
 
   function removeEl(el) {
@@ -168,6 +240,64 @@
     }
   }
 
+  /* Whitespace + ASCII/typographic punctuation. If a text node adjacent to
+   * a frame contains only these characters (in any order, optionally with
+   * leading/trailing whitespace), we collapse it so the frame sits flush
+   * against its neighbor text. We never touch alphabetic/digit content. */
+  var HIDE_PUNCT_RE = /^[\s\u00a0.,;:!?\u2026\u2014\u2013\-—–'"‘’“”()\[\]{}<>\/\\|@#\$%\^&\*_+=`~]*$/;
+
+  /** If the given text node contains only punctuation/whitespace, wrap it in
+   *  a hidden span so the frame flush-mates with its surrounding text. The
+   *  wrap is reversible: we restore the original text node when adjacent
+   *  punctuation is no longer applicable (e.g., on dismiss). */
+  function hideIfPunctuationOnly(textNode) {
+    if (!textNode || textNode.nodeType !== 3) return;
+    if (textNode.parentNode && textNode.parentNode.classList &&
+        textNode.parentNode.classList.contains('delta-adj-hidden')) {
+      return; // already wrapped
+    }
+    var txt = textNode.nodeValue;
+    if (!txt) return;
+    if (HIDE_PUNCT_RE.test(txt) && /\S/.test(txt)) {
+      var wrapper = document.createElement('span');
+      wrapper.className = 'delta-adj-hidden';
+      textNode.parentNode.insertBefore(wrapper, textNode);
+      wrapper.appendChild(textNode);
+    }
+  }
+
+  /** Reverse of hideIfPunctuationOnly: unwrap a single hidden span if present. */
+  function unhideIfWrapped(textNode) {
+    var parent = textNode && textNode.parentNode;
+    if (parent && parent.classList && parent.classList.contains('delta-adj-hidden')) {
+      var grand = parent.parentNode;
+      if (!grand) return;
+      grand.insertBefore(textNode, parent);
+      if (!parent.firstChild) grand.removeChild(parent);
+    }
+  }
+
+  /** Scan the text-node siblings immediately before and after `el` and hide
+   *  them if they contain only punctuation. Operates within a single parent
+   *  so it doesn't cross element boundaries. */
+  function hideAdjacentPunctuation(el) {
+    if (!el || !el.parentNode) return;
+    var prev = el.previousSibling;
+    if (prev && prev.nodeType === 3) hideIfPunctuationOnly(prev);
+    var next = el.nextSibling;
+    if (next && next.nodeType === 3) hideIfPunctuationOnly(next);
+  }
+
+  /** Restore any hidden adjacent punctuation around the given element.
+   *  Called on dismiss so we don't strand wrapped text nodes. */
+  function restoreAdjacentPunctuation(el) {
+    if (!el || !el.parentNode) return;
+    var prev = el.previousSibling;
+    if (prev && prev.nodeType === 3) unhideIfWrapped(prev);
+    var next = el.nextSibling;
+    if (next && next.nodeType === 3) unhideIfWrapped(next);
+  }
+
   /**
    * Create an expanded bubble. The bubble is inserted INLINE in place of the
    * given marker element (which is removed). The marker loses its parent —
@@ -219,35 +349,53 @@
     var actions = document.createElement('div');
     actions.className = 'delta-bubble-actions';
 
-    var transferBtn = document.createElement('span');
-    transferBtn.className = 'delta-bubble-transfer';
-    transferBtn.textContent = 'Send to Chat';
-    transferBtn.title = 'Send this expansion to the Chat tab';
-    transferBtn.style.display = 'none';
-    transferBtn.addEventListener('click', function (e) {
-      e.stopPropagation();
-      var responseData = entry.data || {};
-      browser.runtime.sendMessage({
-        type: 'transferExpansion',
-        selection: responseData.selection || '',
-        context: responseData.context || '',
-        prompt: responseData.prompt || '',
-        response: entry.responseText || ''
+    /* Send-to-Chat is only offered on bubbles directly embedded in the page
+     * (or future top-level frames). Sub-expansions nested inside a parent
+     * bubble skip it — they have no separate "Chat" destination, since
+     * sending the whole parent's expansion is enough.
+     */
+    var transferBtn = null;
+    if (!parent) {
+      transferBtn = document.createElement('button');
+      transferBtn.className = 'delta-bubble-transfer';
+      transferBtn.title = 'Send to Chat';
+      transferBtn.setAttribute('aria-label', 'Send to Chat');
+      transferBtn.type = 'button';
+      /* Inline SVG: speech-bubble glyph. Inherits currentColor. */
+      transferBtn.innerHTML =
+        '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">' +
+        '<path fill="none" stroke="currentColor" stroke-width="1.4" ' +
+        'stroke-linecap="round" stroke-linejoin="round" ' +
+        'd="M2.5 3.5h11a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H6.5L4 13.5V11.5H2.5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1z"/>' +
+        '</svg>';
+      transferBtn.style.display = 'none';
+      transferBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var responseData = entry.data || {};
+        browser.runtime.sendMessage({
+          type: 'transferExpansion',
+          selection: responseData.selection || '',
+          context: responseData.context || '',
+          prompt: responseData.prompt || '',
+          response: entry.responseText || ''
+        });
+        transferBtn.classList.add('delta-bubble-transfer-done');
+        transferBtn.style.pointerEvents = 'none';
       });
-      transferBtn.textContent = 'Sent';
-      transferBtn.style.pointerEvents = 'none';
-    });
+    }
 
-    var close = document.createElement('span');
+    var close = document.createElement('button');
     close.className = 'delta-bubble-close';
     close.textContent = '\u00d7';
     close.title = 'Close (or right-click to fold)';
+    close.setAttribute('aria-label', 'Close');
+    close.type = 'button';
     close.addEventListener('click', function (e) {
       e.stopPropagation();
       dismissBubble(id);
     });
 
-    actions.appendChild(transferBtn);
+    if (transferBtn) actions.appendChild(transferBtn);
     actions.appendChild(close);
     header.appendChild(title);
     header.appendChild(actions);
@@ -294,9 +442,23 @@
       }, 0);
     }, true);
 
-    /* Insert: replace marker with bubble, or append to container */
+    /* Insert: replace marker with bubble, or append to container.
+     * If the marker isn't actually a child of `container` (e.g., because
+     * the marker was placed in a deeper descendant by wrapRangeWithMarker),
+     * fall back to the marker's real parentNode so we never strand a
+     * marker in the DOM — that would leave the user looking at a colored
+     * span with no click handler (the "always folded" symptom). */
     if (marker && container) {
-      container.replaceChild(el, marker);
+      try {
+        container.replaceChild(el, marker);
+      } catch (err) {
+        var realParent = marker.parentNode;
+        if (realParent) {
+          realParent.replaceChild(el, marker);
+        } else {
+          document.body.appendChild(el);
+        }
+      }
     } else if (container) {
       container.appendChild(el);
     } else {
@@ -306,9 +468,25 @@
 
     entry.el = el;
 
+    /* If the original text had punctuation immediately before/after, hide it
+     * so the frame sits flush. */
+    hideAdjacentPunctuation(el);
+
     /* Register the bubble so chunks can find it */
     bubbles.set(id, entry);
-    if (parent) parent.children.set(id, entry);
+    if (parent) {
+      parent.children.set(id, entry);
+      /* The parent body now hosts a sub-bubble — drop its bottom padding so
+       * the sub-bubble's top edge sits flush with the parent's text area.
+       * (Re-applied when the last sub-bubble is dismissed.) */
+      var parentBody = parent.el && parent.el.querySelector('.delta-bubble-body');
+      if (parentBody) parentBody.classList.remove('delta-bubble-body--text-only');
+    } else {
+      /* Top-level bubble: if its body has no sub-bubbles it should keep the
+       * small bottom padding so the text doesn't kiss the frame edge. */
+      var body = el.querySelector('.delta-bubble-body');
+      if (body) body.classList.add('delta-bubble-body--text-only');
+    }
 
     return entry;
   }
@@ -408,6 +586,13 @@
     entry.marker = marker;
     entry.folded = true;
     /* entry.el is intentionally kept (detached) for re-expand swap back. */
+
+    /* Restore any punctuation that was hidden around the bubble before fold
+     * (it's no longer adjacent to the marker — wait, actually it IS still
+     * adjacent; the marker took the bubble's slot). Re-run the check on the
+     * marker so punctuation still gets hidden when the bubble becomes a
+     * marker. */
+    hideAdjacentPunctuation(marker);
   }
 
   /**
@@ -415,29 +600,45 @@
    * no DOM recreation). Nested sub-bubbles that were folded remain as markers
    * inside `entry.el`; clicking them re-expands each via its own marker
    * handler using its cached response.
+   *
+   * Three cases for where the marker might be:
+   *  (a) Live in the document, with a real parentNode — simple swap.
+   *  (b) Detached (no parentNode). Re-insert the cached el at a sensible
+   *      location: into the parent bubble's body if this is a sub-bubble,
+   *      otherwise at the end of document.body.
+   *  (c) Completely lost (entry.marker is null). Same fallback as (b).
    */
   function reexpandBubble(id) {
     var entry = bubbles.get(id);
     if (!entry || !entry.folded) return;
-
-    var marker = entry.marker;
-    if (!marker || !marker.parentNode) {
-      /* Marker lost (e.g. parent fold detached it from the live DOM, leaving
-       * it dangling inside the cached parent el). In that case the parent
-       * re-expand will re-attach the parent el — and with it this marker —
-       * so the user clicks it then and we'll get a real parent node here.
-       * For safety, if we have no parent node, we just attach the bubble
-       * at end of body. */
+    if (!entry.el) {
+      /* We somehow lost the cached element. Best we can do is mark unfolded
+       * so the next fold() call isn't a no-op. */
       entry.folded = false;
-      if (entry.el) document.body.appendChild(entry.el);
       entry.marker = null;
       return;
     }
 
-    var parent = marker.parentNode;
-    parent.replaceChild(entry.el, marker);
+    var marker = entry.marker;
+    if (marker && marker.parentNode) {
+      /* Case (a): marker is live. Swap it for the cached el. */
+      marker.parentNode.replaceChild(entry.el, marker);
+    } else {
+      /* Case (b)/(c): re-insert the cached el into the parent body if we
+       * have one, otherwise at end of document.body. */
+      var target = null;
+      if (entry.parent && entry.parent.el) {
+        target = entry.parent.el.querySelector('.delta-bubble-body');
+      }
+      if (!target) target = document.body;
+      target.appendChild(entry.el);
+    }
+
     entry.marker = null;
     entry.folded = false;
+
+    /* Hide adjacent punctuation that should sit flush with the frame. */
+    hideAdjacentPunctuation(entry.el);
 
     /* If we never had a response (e.g. folded mid-stream), re-issue the
      * request by sending expandRequest again. */
@@ -479,6 +680,11 @@
     /* Recursively dismiss children */
     entry.children.forEach(function (child) { dismissBubble(child.id); });
 
+    /* Restore any hidden adjacent punctuation so we don't strand wrappers
+     * in the document when the bubble is removed. */
+    if (entry.el) restoreAdjacentPunctuation(entry.el);
+    if (entry.marker) restoreAdjacentPunctuation(entry.marker);
+
     /* Restore original DOM if we have a saved range and the marker/bubble is
      * still attached. We do this by unwrapping — replace the bubble (or
      * marker) with its original text only if the bubble was folded, otherwise
@@ -510,7 +716,15 @@
     }
 
     bubbles.delete(id);
-    if (entry.parent) entry.parent.children.delete(id);
+    if (entry.parent) {
+      entry.parent.children.delete(id);
+      /* If the parent no longer hosts any sub-bubbles, restore its body's
+       * bottom padding so the text doesn't kiss the frame edge. */
+      if (entry.parent.children.size === 0 && entry.parent.el) {
+        var pbody = entry.parent.el.querySelector('.delta-bubble-body');
+        if (pbody) pbody.classList.add('delta-bubble-body--text-only');
+      }
+    }
   }
 
   /** Replace a marker element with its own child text (i.e., unwrap). */
@@ -597,7 +811,14 @@
             marker.textContent = data.selection;
             pbody.appendChild(marker);
           }
-          container = pbody;
+          /* The marker may have been placed inside a deeper descendant of
+           * pbody (e.g., the <span class="delta-bubble-content"> that
+           * holds the parent's response text). Use its actual parentNode
+           * as the container so replaceChild() can find it. Falling back
+           * to pbody would throw "NotFoundError" and leave the marker
+           * stranded in the DOM — which is what the user was seeing as
+           * "always folded". */
+          container = marker && marker.parentNode ? marker.parentNode : pbody;
         }
       } else if (data.range) {
         marker = wrapRangeWithMarker(data.range);
@@ -689,6 +910,17 @@
    * createBubble time below — handled inline via body.addEventListener with
    * capture=true inside createBubble (see body.__deltaParentEntry).
    */
+
+  /* ---- Init: apply theme + re-apply on visibility/page-show ----
+   * The content script runs at document_idle so the page is already painted
+   * by the time we read backgroundColor. We also re-apply on `pageshow` for
+   * bfcache restores and on `visibilitychange` in case the OS theme changed
+   * while the tab was hidden. */
+  applyPageTheme();
+  window.addEventListener('pageshow', applyPageTheme);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') applyPageTheme();
+  });
 
   /* ---- Cleanup on page unload ---- */
   window.addEventListener('unload', function () {
