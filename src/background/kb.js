@@ -191,19 +191,36 @@ async function callProviderNonStream(messages) {
   return fullResponse.trim();
 }
 
-export async function analyzeExpansions(records, markFedFn) {
+export async function analyzeExpansions(records, markFedFn, onProgress) {
   let currentPrompt = await loadKbPrompt();
   let analyzed = 0;
+  const total = records.length;
 
-  for (const record of records) {
-    const material = buildSingleMaterial(record);
-    const analysisMessages = buildKbAnalysisMessages(currentPrompt, material);
-    currentPrompt = await callProviderNonStream(analysisMessages);
-    analyzed++;
+  try {
+    for (const record of records) {
+      const material = buildSingleMaterial(record);
+      const analysisMessages = buildKbAnalysisMessages(currentPrompt, material);
+      currentPrompt = await callProviderNonStream(analysisMessages);
+      analyzed++;
 
-    if (markFedFn) {
-      await markFedFn(record.id);
+      if (markFedFn) {
+        await markFedFn(record.id);
+      }
+
+      // Save prompt after each record so partial progress is preserved on failure
+      await saveKbPrompt(currentPrompt);
+
+      if (onProgress) {
+        // Fire-and-forget — don't slow the analysis loop for progress UI
+        onProgress(analyzed, total);
+      }
     }
+  } catch (err) {
+    // Save whatever prompt we have before re-throwing
+    if (analyzed > 0) {
+      await saveKbPrompt(currentPrompt);
+    }
+    throw err;
   }
 
   if (analyzed === 0) {
@@ -213,8 +230,6 @@ export async function analyzeExpansions(records, markFedFn) {
       conversationsAnalyzed: 0
     };
   }
-
-  await saveKbPrompt(currentPrompt);
 
   const existingKeywords = await loadKbKeywords();
   const keywordMessages = buildKbKeywordMessages(currentPrompt, existingKeywords);

@@ -192,6 +192,21 @@ browser.commands.onCommand.addListener((command) => {
   });
 });
 
+function createKbProgressCallback() {
+  return (done, total) => {
+    const dashUrl = browser.runtime.getURL('dashboard/dashboard.html');
+    browser.tabs.query({ url: dashUrl }).then(tabs => {
+      for (const tab of tabs) {
+        browser.tabs.sendMessage(tab.id, {
+          type: 'kbAnalyzeProgress',
+          done,
+          total
+        }).catch(() => {});
+      }
+    }).catch(() => {});
+  };
+}
+
 /* ---- Message handler ---- */
 
 browser.runtime.onMessage.addListener((message, sender) => {
@@ -242,7 +257,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
   if (message.type === 'kbAnalyze') {
     return (async () => {
       const unfed = await listUnfedExpansions();
-      return analyzeExpansions(unfed, markExpansionKbFed);
+      return analyzeExpansions(unfed, markExpansionKbFed, createKbProgressCallback());
     })();
   }
 
@@ -251,7 +266,7 @@ browser.runtime.onMessage.addListener((message, sender) => {
       const all = await loadExpansionRecords();
       const n = message.count || all.length;
       const subset = all.slice(-Math.min(n, all.length));
-      return analyzeExpansions(subset, null);
+      return analyzeExpansions(subset, null, createKbProgressCallback());
     })();
   }
 

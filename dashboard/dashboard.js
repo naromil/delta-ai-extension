@@ -423,6 +423,28 @@ function renderKeywords(keywords, container) {
 }
 
 function initKnowledgeBase() {
+  // Listen for analysis progress updates from background
+  browser.runtime.onMessage.addListener((msg) => {
+    if (msg.type === 'kbAnalyzeProgress') {
+      const progressEl = document.getElementById('kb-progress');
+      const fillEl = document.getElementById('kb-progress-fill');
+      const textEl = document.getElementById('kb-progress-text');
+
+      if (!progressEl) return;
+      progressEl.style.display = 'flex';
+      const pct = msg.total > 0 ? (msg.done / msg.total) * 100 : 0;
+      fillEl.style.width = Math.round(pct) + '%';
+      textEl.textContent = `${msg.done} / ${msg.total}`;
+
+      if (msg.done >= msg.total) {
+        setTimeout(() => {
+          progressEl.style.display = 'none';
+          fillEl.style.width = '0%';
+        }, 1200);
+      }
+    }
+  });
+
   refreshKbUI();
 
   const analyzeBtn = document.getElementById('kb-analyze-btn');

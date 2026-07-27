@@ -726,3 +726,40 @@ button.secondary:hover {
   display: flex;
   gap: 8px;
 }
+
+/* ---- KB Progress Bar ---- */
+
+.kb-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+  margin-top: 4px;
+}
+
+.kb-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.kb-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: #8aa0b8;
+  border-radius: 2px;
+  transition: width 0.2s ease;
+}
+
+.kb-progress-text {
+  font-size: 11px;
+  color: rgba(228, 230, 240, 0.45);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.kb-progress.error .kb-progress-fill {
+  background: #cf7b6e;
+}
