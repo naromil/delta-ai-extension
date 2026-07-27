@@ -18,7 +18,18 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content.js"],
+      "js": [
+        "src/content/state.js",
+        "src/content/anchor.js",
+        "src/content/theme.js",
+        "src/content/dom-utils.js",
+        "src/content/persistence.js",
+        "src/content/bubble.js",
+        "src/content/prompt.js",
+        "src/content/rehydrate.js",
+        "src/content/init.js",
+        "content.js"
+      ],
       "css": ["content.css"],
       "run_at": "document_idle",
       "all_frames": true

@@ -11,7 +11,7 @@ The extension consists of three main scripts — a persistent **background modul
 ```
 manifest.json                  # Firefox MV3 manifest (ESM background, all_frames content)
 background.js                  # Background module — message router + LLM streaming orchestrator
-content.js                     # Content script — selection tracking, inline bubble UI, fold/re-expand, theme detection
+content.js                     # Thin IIFE entry point — delegates to src/content/ modules
 content.css                    # CSS custom properties and inline bubble styles (light + dark themes)
 
 dashboard/
@@ -25,6 +25,16 @@ popup/
 └── popup.css
 
 src/
+├── content/
+│   ├── state.js              # Shared state (bubbles Map, pendingChunks, etc.)
+│   ├── anchor.js             # XPath/resolve anchor + text/marker/punctuation helpers
+│   ├── theme.js              # Page theme detection (light/dark)
+│   ├── dom-utils.js          # DOM utilities (removeEl, genId, getSurroundingText)
+│   ├── persistence.js        # Per-page bubble storage persistence
+│   ├── bubble.js             # Bubble lifecycle (create, fold, re-expand, dismiss, update)
+│   ├── prompt.js             # Prompt input UI (showPromptInput)
+│   ├── rehydrate.js          # Rehydration from storage on page load
+│   └── init.js               # Event wiring, message handler, SPA routing, cleanup
 ├── background/
 │   ├── config.js              # browser.storage.local wrapper (load/save/resolve)
 │   ├── provider.js            # Streaming LLM client — SSE, Gemini, multi-provider dispatch
@@ -90,41 +100,56 @@ The background script is a persistent **ES module** (`"type": "module"` in the m
 
 5. **Message routing** — Dispatches 20+ message types covering expand, chat, KB, config, and settings. See Message protocol below.
 
-### Layer 2: Content script (`content.js`)
+### Layer 2: Content script (`src/content/` modules + `content.js`)
 
-Injected into **all frames** (`all_frames: true`), guarded by `window.__deltaExpandInjected` to prevent double injection. The content script manages the **inline bubble UI** — expansions are rendered as `inline-block` elements embedded directly in the page's DOM, replacing the selected text.
+Injected into **all frames** (`all_frames: true`), the content script is split into 9 focused modules under `src/content/` plus a thin entry point in `content.js` that guards against double injection and calls `initContentScript()`. The modules execute sequentially in the shared content-script global scope (Firefox loads them in manifest order); no ES module imports are needed.
 
-**State**:
+The core modules:
+- **`state.js`** — Declares shared mutable state: `bubbles` Map, `pendingChunks`, `lastExpandData`, `isRestoring`, etc.
+- **`anchor.js`** — XPath serialization/resolution, text-anchor fallback, marker DOM wrapping, punctuation suppression.
+- **`theme.js`** — Page theme detection (light/dark).
+- **`dom-utils.js`** — `removeEl`, `genId`, `getSurroundingText`, `captureExpandData`.
+- **`persistence.js`** — `persistBubble`, `buildBubbleRecord`, `removePersistedBubble`.
+- **`bubble.js`** — `createBubble`, `updateBubble`, `foldBubble`, `reexpandBubble`, `dismissBubble`.
+- **`prompt.js`** — `showPromptInput` (floating input near selection).
+- **`rehydrate.js`** — `rehydrateFromStorage`, `restoreOne`, `restoreSubBubble`, `setBubbleResponse`.
+- **`init.js`** — `initContentScript()`: registers event listeners, message handler, applies theme, patches history API for SPA routing, calls rehydration, and sets up unload cleanup.
+
+### Layer 2.5: Entry point (`content.js`)
+
+The root-level `content.js` is now a minimal IIFE guarded by `window.__deltaExpandInjected`. Its only job is to call `initContentScript()` from `src/content/init.js`.
+
+**State** (declared in `state.js`):
 - `bubbles` — `Map<bubbleId, { id, el, marker, range, data, responseText, children, parent, folded }>` — all bubble entries (expanded or folded).
 - `pendingChunks` — `Map<requestId, bubbleId>` — maps in-flight stream requestIds to their bubble entry.
 - `lastSubParentEntry` — reference to the parent entry for sub-expansion routing.
 - `lastClickX`, `lastClickY` — captured on `contextmenu` event for positioning.
 - `lastExpandData` — `{ selection, context, rect }` from the most recent selection.
 
-**Selection tracking** — `getSurroundingText(node, maxLen)` walks from the selection anchor node to the nearest block-level ancestor, extracts text, returns up to `maxLen` characters centered on the selection. Events on `contextmenu` (capture phase) and `mouseup` passively track selections.
+**Selection tracking** (`dom-utils.js:getSurroundingText`) — `getSurroundingText(node, maxLen)` walks from the selection anchor node to the nearest block-level ancestor, extracts text, returns up to `maxLen` characters centered on the selection. Events on `contextmenu` (capture phase) and `mouseup` passively track selections.
 
-**Inline bubble creation** (`createBubble`):
+**Inline bubble creation** (`bubble.js:createBubble`):
 - Creates a `.delta-bubble` div with header (title + close/transfer buttons) and body (`.delta-bubble-body`).
 - Replaces the selected text node (or marker) with the bubble as a child of the page DOM.
 - Bubbles are `inline-block`, `width: fit-content`, `max-width: min(420px, 100%)`.
 - Sub-bubbles are nested inside the parent's `.delta-bubble-body` and `display: block` with `width: fit-content`.
 
-**Fold/re-expand**:
+**Fold/re-expand** (`bubble.js:foldBubble` / `bubble.js:reexpandBubble`):
 - **Fold** (right-click on bubble header): Detaches the cached bubble `el`, inserts a `.delta-bubble-marker` span with the original selection text, colored to indicate the bubble type.
 - **Re-expand** (left-click or right-click on marker): Swaps the marker back for the cached `el` — no AI call, no DOM recreation. Sub-bubble markers are preserved inside the parent's cached `el`.
 
-**Punctuation suppression** — Punctuation-only text nodes adjacent to a bubble are wrapped in `.delta-adj-hidden` (`display: none`) so the bubble sits flush with surrounding text.
+**Punctuation suppression** (`anchor.js:suppressAdjacentPunctuation`) — Punctuation-only text nodes adjacent to a bubble are wrapped in `.delta-adj-hidden` (`display: none`) so the bubble sits flush with surrounding text.
 
-**Theme detection**:
+**Theme detection** (`theme.js:detectPageTheme` / `theme.js:applyPageTheme`):
 - `detectPageTheme()` walks up the DOM from `document.body` to find the first non-transparent background color, computes Rec.709 luminance. Falls back to `prefers-color-scheme`.
 - Applied via `:root.delta-theme-light` class on `<html>`.
 - Re-applied on `pageshow` and `visibilitychange → visible`.
 
 **Font size**: `font-size: calc(1em - 1px)` — the bubble text is 1px smaller than the surrounding page text. Sub-bubbles inherit the parent bubble's size, compounding the subtraction.
 
-**Prompt input**: `showPromptInput()` creates a floating input near the selection. On Enter, generates a `genId()` (timestamp-based + counter) as the `requestId`, creates a bubble, and sends `expandRequest` to the background. On Esc or outside click, dismisses the prompt.
+**Prompt input** (`prompt.js:showPromptInput`): `showPromptInput()` creates a floating input near the selection. On Enter, generates a `genId()` (timestamp-based + counter) as the `requestId`, creates a bubble, and sends `expandRequest` to the background. On Esc or outside click, dismisses the prompt.
 
-**Cleanup**: On `window.unload`, sends `abort` for every active stream.
+**Cleanup** — On `window.unload`, sends `abort` for every active stream.
 
 ### Layer 3: Shared modules (`src/shared/`)
 
@@ -366,12 +391,12 @@ Every inline bubble on a page is persisted under `(url, frameId)` in `'deltaPage
 - Records expire after 30 days of inactivity (`pruneExpired`, called lazily on read).
 - `removeBubble` cascades to all descendants so dismissing a parent clears its sub-tree in one call.
 
-**Anchor strategy** (in `content.js`):
+**Anchor strategy** (in `src/content/anchor.js`):
 - **XPath** preferred: positional path from a text node up to the document root, e.g. `/html/body/main[1]/article[2]/p[3]/text()[1]`. Structural — works across reloads as long as the surrounding DOM tree is intact.
 - **Text fallback**: if the XPath no longer resolves, the content script walks `document.body` for a text node containing the selection string. Skips our own `.delta-bubble`/`.delta-bubble-marker`/`.delta-adj-hidden` nodes so it doesn't recurse into restored bubbles.
 - If neither resolves, the record is dropped (orphan cleanup).
 
-**Rehydrate** (`content.js:rehydrateFromStorage`):
+**Rehydrate** (`src/content/rehydrate.js:rehydrateFromStorage`):
 - On content-script init, the script sends `{ type: 'bubbleLoad', url }`. The background responds with the array of records for the current `(url, frameId)`.
 - Records are processed in tree order: top-level bubbles first, then children. Each is anchored, re-created via the existing `createBubble()` path, the response text is set directly (no streaming round-trip), and the bubble is folded if it was folded.
 - The `isRestoring` flag suppresses persist hooks during rehydrate so we don't write what we just read.
@@ -380,7 +405,7 @@ Every inline bubble on a page is persisted under `(url, frameId)` in `'deltaPage
 - `history.pushState` and `history.replaceState` are monkey-patched at init; `popstate` is also listened for. On any of these, `currentUrl` updates and rehydrate runs again for the new URL.
 - Bubbles from the previous URL are abandoned in their old storage key (not migrated). They expire after 30 days.
 
-**Persistence points** in `content.js`:
+**Persistence points** in content-script modules:
 - `createBubble` → persist (parent + empty response)
 - `updateBubble` with `done: true` → persist with full response
 - `foldBubble` → persist with `folded: true`
