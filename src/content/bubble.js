@@ -287,7 +287,12 @@ function foldBubble(id) {
     'vertical-align:baseline;' +
     'user-select:text;';
   // Triangle prefix for visual distinction
-  marker.innerHTML = '<span style="font-size:0.85em;color:' + markerTriangle + ';margin-right:3px;">\u25B8</span>';
+  var triangleSpan = document.createElement('span');
+  triangleSpan.style.fontSize = '0.85em';
+  triangleSpan.style.color = markerTriangle;
+  triangleSpan.style.marginRight = '3px';
+  triangleSpan.textContent = '\u25B8';
+  marker.appendChild(triangleSpan);
   marker.appendChild(document.createTextNode(entry.data.selection || ''));
   // Hover darkening
   marker.addEventListener('mouseenter', function () { marker.style.background = markerBgHover; });
