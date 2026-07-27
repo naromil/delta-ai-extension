@@ -3,6 +3,21 @@ import { MAX_KEYWORDS_PER_CATEGORY, createDefaultKbProviderConfig } from '../sha
 import { callProviderStream } from './provider.js';
 import { loadConfig } from './config.js';
 
+function cleanKbResponse(text) {
+  if (!text) return '';
+  // Remove XML/HTML thought-process blocks (<thought>, <thinking>, etc.)
+  text = text.replace(/<(thought|thinking|analysis|reasoning|plan|reflection)>[\s\S]*?<\/\1>/gi, '');
+  // Remove markdown code blocks tagged as thought/thinking/analysis
+  text = text.replace(/```(thought|thinking|analysis)\b[\s\S]*?```/gi, '');
+  // Remove "Thought:" / "*Thought:" / "*Thought process:" prefixed lines
+  text = text.replace(/^[\s*]*Thought[:\s].*$/gm, '');
+  text = text.replace(/^[\s*]*Thought process[:\s].*$/gm, '');
+  text = text.replace(/^[\s*]*(Analysis|Reasoning|Plan|Reflection)[:\s].*$/gm, '');
+  // Trim whitespace
+  text = text.trim();
+  return text;
+}
+
 const KB_STORAGE_KEY = 'deltaKbData';
 const KB_CONFIG_STORAGE_KEY = 'deltaKbConfig';
 
@@ -201,6 +216,7 @@ export async function analyzeExpansions(records, markFedFn, onProgress) {
       const material = buildSingleMaterial(record);
       const analysisMessages = buildKbAnalysisMessages(currentPrompt, material);
       currentPrompt = await callProviderNonStream(analysisMessages);
+      currentPrompt = cleanKbResponse(currentPrompt);
       analyzed++;
 
       if (markFedFn) {
@@ -234,7 +250,8 @@ export async function analyzeExpansions(records, markFedFn, onProgress) {
   const existingKeywords = await loadKbKeywords();
   const keywordMessages = buildKbKeywordMessages(currentPrompt, existingKeywords);
   const rawKeywords = await callProviderNonStream(keywordMessages);
-  const parsed = parseKeywords(rawKeywords);
+  const cleaned = cleanKbResponse(rawKeywords);
+  const parsed = parseKeywords(cleaned);
   const merged = mergeKeywords(existingKeywords, parsed);
   const trimmed = trimByCategory(merged);
   await saveKbKeywords(trimmed);
