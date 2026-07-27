@@ -59,12 +59,7 @@ function createDefaultConfig() {
     baseUrl: '',
     host: '',
     model: '',
-    webSearchEnabled: false,
-    kbProviderType: '',
-    kbApiKey: '',
-    kbBaseUrl: '',
-    kbHost: '',
-    kbModel: ''
+    webSearchEnabled: false
   };
 }
 
@@ -605,21 +600,45 @@ function updateKbFieldVisibility(providerType) {
   document.getElementById('kb-field-host').style.display = authShape === 'host' ? '' : 'none';
 }
 
+const KB_CONFIG_STORAGE_KEY = 'deltaKbConfig';
+
+function createDefaultKbProviderConfig() {
+  return {
+    providerType: '',
+    apiKey: '',
+    baseUrl: '',
+    host: '',
+    model: ''
+  };
+}
+
 async function initKbProviderConfig() {
   const providerSelect = document.getElementById('kbProviderType');
   const modelInput = document.getElementById('kbModel');
 
-  const config = await loadConfig();
-  providerSelect.value = config.kbProviderType || '';
-  document.getElementById('kbApiKey').value = config.kbApiKey || '';
-  document.getElementById('kbBaseUrl').value = config.kbBaseUrl || '';
-  document.getElementById('kbHost').value = config.kbHost || '';
-  modelInput.value = config.kbModel || '';
-  updateKbFieldVisibility(config.kbProviderType || '');
-  if (config.kbProviderType) {
-    updateKbSuggestions(config.kbProviderType);
+  // Load from separate KB config key
+  async function loadKbProviderConfig() {
+    try {
+      const obj = await browser.storage.local.get(KB_CONFIG_STORAGE_KEY);
+      const stored = obj[KB_CONFIG_STORAGE_KEY];
+      if (stored && typeof stored === 'object') {
+        return { ...createDefaultKbProviderConfig(), ...stored };
+      }
+    } catch { /* ignore */ }
+    return createDefaultKbProviderConfig();
+  }
+
+  const kbConfig = await loadKbProviderConfig();
+  providerSelect.value = kbConfig.providerType || '';
+  document.getElementById('kbApiKey').value = kbConfig.apiKey || '';
+  document.getElementById('kbBaseUrl').value = kbConfig.baseUrl || '';
+  document.getElementById('kbHost').value = kbConfig.host || '';
+  modelInput.value = kbConfig.model || '';
+  updateKbFieldVisibility(kbConfig.providerType || '');
+  if (kbConfig.providerType) {
+    updateKbSuggestions(kbConfig.providerType);
   } else {
-    updateKbSuggestions(config.providerType || 'openai-compatible');
+    updateKbSuggestions(document.getElementById('providerType').value || 'openai-compatible');
   }
 
   providerSelect.addEventListener('change', () => {
@@ -628,7 +647,7 @@ async function initKbProviderConfig() {
     if (ptype) {
       updateKbSuggestions(ptype);
     } else {
-      updateKbSuggestions(document.getElementById('providerType').value);
+      updateKbSuggestions(document.getElementById('providerType').value || 'openai-compatible');
     }
     modelInput.value = '';
   });
@@ -636,18 +655,16 @@ async function initKbProviderConfig() {
   document.getElementById('kb-settings-form').addEventListener('submit', async (e) => {
     e.preventDefault();
 
-    const kbConfig = {
-      kbProviderType: providerSelect.value,
-      kbApiKey: document.getElementById('kbApiKey').value.trim(),
-      kbBaseUrl: document.getElementById('kbBaseUrl').value.trim(),
-      kbHost: document.getElementById('kbHost').value.trim(),
-      kbModel: modelInput.value.trim()
+    const newKbConfig = {
+      providerType: providerSelect.value,
+      apiKey: document.getElementById('kbApiKey').value.trim(),
+      baseUrl: document.getElementById('kbBaseUrl').value.trim(),
+      host: document.getElementById('kbHost').value.trim(),
+      model: modelInput.value.trim()
     };
 
-    const existingConfig = await loadConfig();
-    const merged = { ...existingConfig, ...kbConfig };
     try {
-      await browser.storage.local.set({ [STORAGE_KEY]: { ...createDefaultConfig(), ...merged } });
+      await browser.storage.local.set({ [KB_CONFIG_STORAGE_KEY]: { ...createDefaultKbProviderConfig(), ...newKbConfig } });
       showStatus('kb-status', 'Saved.', false);
     } catch {
       showStatus('kb-status', 'Save failed.', true);

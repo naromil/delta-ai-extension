@@ -50,12 +50,17 @@ export function createDefaultConfig() {
     host: '',
     model: '',
     webSearchEnabled: false,
-    contextChars: 1500,
-    kbProviderType: '',
-    kbApiKey: '',
-    kbBaseUrl: '',
-    kbHost: '',
-    kbModel: ''
+    contextChars: 1500
+  };
+}
+
+export function createDefaultKbProviderConfig() {
+  return {
+    providerType: '',
+    apiKey: '',
+    baseUrl: '',
+    host: '',
+    model: ''
   };
 }
 

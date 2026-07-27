@@ -1,9 +1,10 @@
 import { KB_ANALYSIS_SYSTEM_PROMPT, KB_KEYWORD_SYSTEM_PROMPT } from '../shared/prompts.js';
-import { MAX_KEYWORDS_PER_CATEGORY } from '../shared/models.js';
+import { MAX_KEYWORDS_PER_CATEGORY, createDefaultKbProviderConfig } from '../shared/models.js';
 import { callProviderStream } from './provider.js';
 import { loadConfig } from './config.js';
 
 const KB_STORAGE_KEY = 'deltaKbData';
+const KB_CONFIG_STORAGE_KEY = 'deltaKbConfig';
 
 export async function loadKbPrompt() {
   try {
@@ -44,6 +45,22 @@ export async function loadKbData() {
   } catch {
     return { prompt: '', keywords: [] };
   }
+}
+
+export async function loadKbProviderConfig() {
+  try {
+    const obj = await browser.storage.local.get(KB_CONFIG_STORAGE_KEY);
+    const stored = obj[KB_CONFIG_STORAGE_KEY];
+    if (stored && typeof stored === 'object') {
+      return { ...createDefaultKbProviderConfig(), ...stored };
+    }
+  } catch { /* ignore */ }
+  return createDefaultKbProviderConfig();
+}
+
+export async function saveKbProviderConfig(config) {
+  await browser.storage.local.set({ [KB_CONFIG_STORAGE_KEY]: { ...createDefaultKbProviderConfig(), ...config } });
+  return true;
 }
 
 function buildSingleMaterial(record) {
@@ -156,14 +173,14 @@ function trimByCategory(keywords) {
 }
 
 async function callProviderNonStream(messages) {
-  const config = await loadConfig();
-  const effectiveConfig = (config.kbProviderType || config.kbModel)
+  const [config, kbConfig] = await Promise.all([loadConfig(), loadKbProviderConfig()]);
+  const effectiveConfig = (kbConfig.providerType || kbConfig.model)
     ? {
-        providerType: config.kbProviderType || config.providerType,
-        apiKey: config.kbApiKey || config.apiKey,
-        model: config.kbModel || config.model,
-        baseUrl: config.kbBaseUrl || config.baseUrl,
-        host: config.kbHost || config.host,
+        providerType: kbConfig.providerType || config.providerType,
+        apiKey: kbConfig.apiKey || config.apiKey,
+        model: kbConfig.model || config.model,
+        baseUrl: kbConfig.baseUrl || config.baseUrl,
+        host: kbConfig.host || config.host,
         webSearchEnabled: false
       }
     : config;
