@@ -1,4 +1,4 @@
-import { providerRegistry } from '../src/shared/models.js';
+import { providerRegistry, KB_CONFIG_STORAGE_KEY, createDefaultKbProviderConfig, loadKbProviderConfig } from '../src/shared/models.js';
 
 const STORAGE_KEY = 'deltaConfig';
 const COMMAND_NAME = 'expand';
@@ -622,33 +622,9 @@ function updateKbFieldVisibility(providerType) {
   document.getElementById('kb-field-host').style.display = authShape === 'host' ? '' : 'none';
 }
 
-const KB_CONFIG_STORAGE_KEY = 'deltaKbConfig';
-
-function createDefaultKbProviderConfig() {
-  return {
-    providerType: '',
-    apiKey: '',
-    baseUrl: '',
-    host: '',
-    model: ''
-  };
-}
-
 async function initKbProviderConfig() {
   const providerSelect = document.getElementById('kbProviderType');
   const modelInput = document.getElementById('kbModel');
-
-  // Load from separate KB config key
-  async function loadKbProviderConfig() {
-    try {
-      const obj = await browser.storage.local.get(KB_CONFIG_STORAGE_KEY);
-      const stored = obj[KB_CONFIG_STORAGE_KEY];
-      if (stored && typeof stored === 'object') {
-        return { ...createDefaultKbProviderConfig(), ...stored };
-      }
-    } catch { /* ignore */ }
-    return createDefaultKbProviderConfig();
-  }
 
   const kbConfig = await loadKbProviderConfig();
   providerSelect.value = kbConfig.providerType || '';

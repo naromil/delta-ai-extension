@@ -1,5 +1,5 @@
 import { KB_ANALYSIS_SYSTEM_PROMPT, KB_KEYWORD_SYSTEM_PROMPT } from '../shared/prompts.js';
-import { MAX_KEYWORDS_PER_CATEGORY, createDefaultKbProviderConfig } from '../shared/models.js';
+import { MAX_KEYWORDS_PER_CATEGORY, createDefaultKbProviderConfig, KB_CONFIG_STORAGE_KEY, loadKbProviderConfig } from '../shared/models.js';
 import { callProviderStream } from './provider.js';
 import { loadConfig } from './config.js';
 
@@ -19,7 +19,6 @@ function cleanKbResponse(text) {
 }
 
 const KB_STORAGE_KEY = 'deltaKbData';
-const KB_CONFIG_STORAGE_KEY = 'deltaKbConfig';
 
 export async function loadKbPrompt() {
   try {
@@ -60,17 +59,6 @@ export async function loadKbData() {
   } catch {
     return { prompt: '', keywords: [] };
   }
-}
-
-export async function loadKbProviderConfig() {
-  try {
-    const obj = await browser.storage.local.get(KB_CONFIG_STORAGE_KEY);
-    const stored = obj[KB_CONFIG_STORAGE_KEY];
-    if (stored && typeof stored === 'object') {
-      return { ...createDefaultKbProviderConfig(), ...stored };
-    }
-  } catch { /* ignore */ }
-  return createDefaultKbProviderConfig();
 }
 
 export async function saveKbProviderConfig(config) {
@@ -219,12 +207,12 @@ export async function analyzeExpansions(records, markFedFn, onProgress) {
       currentPrompt = cleanKbResponse(currentPrompt);
       analyzed++;
 
+      // Save prompt after each record so partial progress is preserved on failure
+      await saveKbPrompt(currentPrompt);
+
       if (markFedFn) {
         await markFedFn(record.id);
       }
-
-      // Save prompt after each record so partial progress is preserved on failure
-      await saveKbPrompt(currentPrompt);
 
       if (onProgress) {
         // Fire-and-forget — don't slow the analysis loop for progress UI

@@ -64,6 +64,19 @@ export function createDefaultKbProviderConfig() {
   };
 }
 
+export const KB_CONFIG_STORAGE_KEY = 'deltaKbConfig';
+
+export async function loadKbProviderConfig() {
+  try {
+    const obj = await browser.storage.local.get(KB_CONFIG_STORAGE_KEY);
+    const stored = obj[KB_CONFIG_STORAGE_KEY];
+    if (stored && typeof stored === 'object') {
+      return { ...createDefaultKbProviderConfig(), ...stored };
+    }
+  } catch { /* ignore */ }
+  return createDefaultKbProviderConfig();
+}
+
 export function createDefaultKbConfig() {
   return {
     prompt: '',

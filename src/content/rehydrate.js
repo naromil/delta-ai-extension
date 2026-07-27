@@ -137,24 +137,43 @@ function restoreOne(record, parentEntry) {
 
 function restoreSubBubble(record, parentEntry) {
   // Restore a sub-bubble directly inside the parent's body.
-  // No anchor resolution needed — the text is in the parent's response.
+  // Try to position at stored xpath (same pattern as restoreOne).
   var container = parentEntry.el && parentEntry.el.querySelector('.delta-bubble-body');
   if (!container) return;
+
+  var marker = null;
+  var range = null;
+  var savedXpath = null;
+  if (record.xpath) {
+    var anchorNode = resolveAnchorXPath(record.xpath);
+    if (anchorNode && container.contains(anchorNode)) {
+      var offset = typeof record.textOffset === 'number' ? record.textOffset : 0;
+      var r = rangeAtTextNode(anchorNode, record.selection, offset);
+      if (r) {
+        range = r;
+        marker = wrapRangeWithMarker(range);
+        if (marker) {
+          savedXpath = buildXPathFromNode(range.startContainer, range.startOffset, document);
+        }
+      }
+    }
+  }
 
   var data = {
     selection: record.selection || '',
     context: record.context || '',
     prompt: record.prompt || '',
-    range: null
+    range: range
   };
 
   var entry = createBubble({
     id: record.id,
-    range: null,
+    range: range,
     data: data,
     parent: parentEntry,
-    marker: null,
-    container: container
+    marker: marker,
+    container: marker ? (marker.parentNode || container) : container,
+    _savedXpath: savedXpath
   });
 
   if (!entry) return;
